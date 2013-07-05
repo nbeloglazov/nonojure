@@ -4,7 +4,12 @@
            [ij.plugin.filter MaximumFinder GaussianBlur EDM])
   (:require [incanter
              [core :as core]
-             [charts :as charts]]))
+             [charts :as charts]]
+            [clojure.java.io :as io]
+            [recognition
+             [classpath :as classpath]]))
+
+(classpath/load-libs)
 
 (defn processor [image]
   (.getProcessor image))
@@ -14,6 +19,9 @@
 
 (defn show [processor]
   (.show (image processor)))
+
+(defn statistics [processor]
+  (.getStatistics processor))
 
 (defn histogram [processor]
   (vec (.getHistogram (statistics processor))))
@@ -26,10 +34,14 @@
       ij.io.FileSaver.
       (.saveAsPng path)))
 
+(defn crop [processor x y width height]
+  (.setRoi processor x y width height)
+  (.crop processor))
+
 (defn center-third [processor]
-  (let [w (.getWidth orig)
-        h (.getHeight orig)]
-    (crop orig (/ w 3) (/ h 3) (/ w 3) (/ h 3))))
+  (let [w (.getWidth processor)
+        h (.getHeight processor)]
+    (crop processor (/ w 3) (/ h 3) (/ w 3) (/ h 3))))
 
 (defn find-maxima-on-image
   "Findx local maxima of image and return instance of ByteProcessor where 255 - max. 0 - otherwise."
@@ -40,13 +52,6 @@
         output-type MaximumFinder/SINGLE_POINTS
         orig-proc (.convertToFloat processor)]
     (.findMaxima maximum-finder orig-proc tolerance threshold output-type true true)))
-
-(defn statistics [processor]
-  (.getStatistics processor))
-
-(defn crop [processor x y width height]
-  (.setRoi processor x y width height)
-  (.crop processor))
 
 (defn to-grayscale [image]
   (let [conv (ImageConverter. image)]
@@ -69,8 +74,8 @@
 
 (defn read-image [file]
   (->> file
-       (str "resources/")
-       java.io.File.
+       (str "examples/")
+       io/resource
        javax.imageio.ImageIO/read
        (ImagePlus. file)
        to-grayscale
@@ -110,7 +115,7 @@
   (let [dup (doto (.duplicate image)
                    (IJ/run "Invert" "")
                    (IJ/run "Distance Map" ""))]
-    (find-maxima dup)))
+    (find-maxima-on-image dup)))
 
 (defn cells-candidates [^ImagePlus image]
   (let [^ByteProcessor maxima (cells-candidates-image image)]
@@ -134,17 +139,14 @@
 
 (def orig (-> "nono5.jpg" read-image))
 
-
-
 #_(doseq [name images]
   (show (binary-nono (read-image name))))
 
-(->> orig
+#_(->> orig
      binary-nono
      distance-map
 ;     find-maxima-on-image
      show)
-
 
 #_(-> (center-third orig)
 ;    gaussian-blur
