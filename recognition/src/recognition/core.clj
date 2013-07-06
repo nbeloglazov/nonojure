@@ -15,7 +15,7 @@
   (.getProcessor image))
 
 (defn image [processor]
-  (ImagePlus. "hhh" processor))
+  (ImagePlus. "image" processor))
 
 (defn show [processor]
   (.show (image processor)))
@@ -135,9 +135,27 @@
     (.threshold dup middle)
     dup))
 
+(defn adaptive-threshold [proc]
+  (let [thresholder (fiji.threshold.Auto_Local_Threshold.)
+        im (image (duplicate proc))]
+    (-> (.exec thresholder im "Mean" 30 20 0 true)
+        seq
+        first
+        processor)))
+
+;(show (adaptive-threshold (read-image "nono5.jpg")))
+
+;(show (read-image "nono3.png"))
+
+
+
 (def images (map #(str "nono" % ".jpg") [4 5 6 7]))
 
 (def orig (-> "nono5.jpg" read-image))
+
+
+
+(show orig)
 
 #_(doseq [name images]
   (show (binary-nono (read-image name))))
