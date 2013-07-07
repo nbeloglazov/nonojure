@@ -4,7 +4,8 @@
            [ij.plugin.filter MaximumFinder GaussianBlur EDM])
   (:require [incanter
              [core :as core]
-             [charts :as charts]]
+             [charts :as charts]
+             [distributions :as dist]]
             [clojure.java.io :as io]
             [recognition
              [classpath :as classpath]]))
@@ -138,37 +139,94 @@
 (defn adaptive-threshold [proc]
   (let [thresholder (fiji.threshold.Auto_Local_Threshold.)
         im (image (duplicate proc))]
-    (-> (.exec thresholder im "Mean" 30 20 0 true)
+    (-> (.exec thresholder im "Mean" 20 20 0 true)
         seq
         first
         processor)))
 
-;(show (adaptive-threshold (read-image "nono5.jpg")))
+(defn opening [proc]
+  (doto proc .erode .dilate))
 
-;(show (read-image "nono3.png"))
+(defn closing [proc]
+  (doto proc .dilate .erod))
+
+(defn squares [blobs]
+  (let [circ-convex (fn [blob]
+                      (let [conv-perm (.getPerimeterConvexHull blob)
+                            area (.getEnclosedArea blob)]
+                        (/ (* conv-perm conv-perm) area)))
+        circ-sq? #(<= 12 (circ-convex %) 20)
+        sqs (->> blobs
+                 (filter circ-sq?)
+                 (filter #(> (.getEnclosedArea %) 100))
+                 (sort-by #(.getEnclosedArea %)))
+        n (count sqs)
+        mean-area (->> sqs
+                       (drop (/ n 10))
+                       (drop-last (/ n 10))
+                       (map #(.getEnclosedArea %))
+                       (dist/mean))
+        area-fits? #(<= (* 0.8 mean-area) (.getEnclosedArea %) (* 1.2 mean-area))]
+    (filter area-fits? sqs)))
+
+(defn has-digit? [blob]
+  (let [sq-size (core/sqrt (.getEnclosedArea blob))]
+   (letfn [(contour-height [pol]
+             (let [rect (.getBounds pol)]
+               (- (.getMaxY rect) (.getMinY rect))))
+           (digit? [pol]
+             (> (contour-height pol) (* 0.5 sq-size)))
+           (has-cavity? [blob]
+             (> (.getPerimeter blob) (* 1.2 (.getPerimeterConvexHull blob))))]
+     (or (->> (.getInnerContours blob)
+              (map digit?)
+              (some true?))
+         (has-cavity? blob)))))
+
+(defn draw-blobs [proc blobs]
+  (let [dup (duplicate proc)]
+    (.setColor dup 0xFFFFFF)
+    (.fill dup)
+    (doseq [bl blobs]
+      (.draw bl dup 1))
+    (show dup)))
+
+(defn show-thresholded [image]
+  (-> image
+      read-image
+      adaptive-threshold
+      show))
+
+(defn blobs [bin-proc]
+  (let [dup (invert (duplicate bin-proc))
+        blobs (ij.blob.ManyBlobs. (image dup))]
+    (.findConnectedComponents blobs)
+    blobs))
+
+
+;(show-thresholded "nono6.jpg")
+
+;(show orig)
+
+(def images (map #(str "nono" % ".jpg") (range 4 13)))
+
+#_(doseq [im images]
+  (show-thresholded im))
+
+#_(let [im "nono5.jpg"
+        orig (read-image im)
+        ad (adaptive-threshold orig)
+        bls (blobs ad)]
+    (show ad)
+    (->> bls
+         squares
+         (remove has-digit?)
+;         (filter has-digit?)
+         (draw-blobs orig)))
+
+;(def orig (-> "nono4.jpg" read-image))
 
 
 
-(def images (map #(str "nono" % ".jpg") [4 5 6 7]))
 
-(def orig (-> "nono5.jpg" read-image))
-
-
-
-(show orig)
-
-#_(doseq [name images]
-  (show (binary-nono (read-image name))))
-
-#_(->> orig
-     binary-nono
-     distance-map
-;     find-maxima-on-image
-     show)
-
-#_(-> (center-third orig)
-;    gaussian-blur
-    pixels
-    (charts/histogram :nbins 50)
-    core/view)
 
