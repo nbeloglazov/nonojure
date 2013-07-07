@@ -7,6 +7,7 @@
                  [net.imagej/ij "1.47u"]
                  [incanter/incanter-charts "1.5.1"]
                  [org.tcrawley/dynapath "0.2.3"]
-                 [com.cemerick/pomegranate "0.2.0"]]
+                 [com.cemerick/pomegranate "0.2.0"]
+                 [clj-kdtree "1.1.0"]]
   :repositories [["imagej.releases" "http://maven.imagej.net/content/repositories/releases"]]
   :resource-paths ["resources"])

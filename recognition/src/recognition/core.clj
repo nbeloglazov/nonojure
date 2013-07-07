@@ -8,7 +8,8 @@
              [distributions :as dist]]
             [clojure.java.io :as io]
             [recognition
-             [classpath :as classpath]]))
+             [classpath :as classpath]]
+            [kdtree :as kd]))
 
 (classpath/load-libs)
 
@@ -82,64 +83,10 @@
        to-grayscale
        processor))
 
-(defn local-maxima
-  ([vals initial]
-     (let [vals (vec vals)
-           size (count vals)
-           rad 3
-           find-max (fn [center]
-                      (->> (range (- rad) (inc rad))
-                           (map #(+ center %))
-                           (remove neg?)
-                           (remove #(>= % size))
-                           (apply max-key vals)))]
-       (loop [cur initial]
-         (let [mx (find-max cur)]
-           (if (= mx cur)
-             cur
-             (recur mx))))))
-  ([vals]
-     (let [step 5]
-       (->> (range 0 (count vals) step)
-            (map #(local-maxima vals %))
-            distinct))))
-
-(defn pixels [processor]
-  (->> processor
-       .getPixels
-       seq
-       (map #(bit-and % 255))))
-
-
-
-(defn cells-candidates-image [^ImagePlus image]
-  (let [dup (doto (.duplicate image)
-                   (IJ/run "Invert" "")
-                   (IJ/run "Distance Map" ""))]
-    (find-maxima-on-image dup)))
-
-(defn cells-candidates [^ImagePlus image]
-  (let [^ByteProcessor maxima (cells-candidates-image image)]
-    (for [^int y (range (.getHeight maxima))
-          ^int x (range (.getWidth maxima))
-          :when (= (.get maxima x y) 255)]
-      [x y])))
-
-(defn binary-nono [processor]
-  (let [hist (histogram (center-third processor))
-        [light dark] (->> (local-maxima hist)
-                          (sort-by #(nth hist %))
-                          reverse
-                          (take 2))
-        middle (* (+ light dark) 1/2)
-        dup (duplicate processor)]
-    (.threshold dup middle)
-    dup))
-
 (defn adaptive-threshold [proc]
   (let [thresholder (fiji.threshold.Auto_Local_Threshold.)
         im (image (duplicate proc))]
-    (-> (.exec thresholder im "Mean" 20 20 0 true)
+    (-> (.exec thresholder im "Mean" 20 10 0 true)
         seq
         first
         processor)))
@@ -169,20 +116,6 @@
         area-fits? #(<= (* 0.8 mean-area) (.getEnclosedArea %) (* 1.2 mean-area))]
     (filter area-fits? sqs)))
 
-(defn has-digit? [blob]
-  (let [sq-size (core/sqrt (.getEnclosedArea blob))]
-   (letfn [(contour-height [pol]
-             (let [rect (.getBounds pol)]
-               (- (.getMaxY rect) (.getMinY rect))))
-           (digit? [pol]
-             (> (contour-height pol) (* 0.5 sq-size)))
-           (has-cavity? [blob]
-             (> (.getPerimeter blob) (* 1.2 (.getPerimeterConvexHull blob))))]
-     (or (->> (.getInnerContours blob)
-              (map digit?)
-              (some true?))
-         (has-cavity? blob)))))
-
 (defn draw-blobs [proc blobs]
   (let [dup (duplicate proc)]
     (.setColor dup 0xFFFFFF)
@@ -203,7 +136,6 @@
     (.findConnectedComponents blobs)
     blobs))
 
-
 ;(show-thresholded "nono6.jpg")
 
 ;(show orig)
@@ -213,20 +145,13 @@
 #_(doseq [im images]
   (show-thresholded im))
 
-#_(let [im "nono5.jpg"
-        orig (read-image im)
-        ad (adaptive-threshold orig)
-        bls (blobs ad)]
-    (show ad)
-    (->> bls
-         squares
-         (remove has-digit?)
-;         (filter has-digit?)
-         (draw-blobs orig)))
 
-;(def orig (-> "nono4.jpg" read-image))
-
-
-
-
+;(show orig)
+#_ (do (def orig (read-image "nono5.jpg"))
+       (let [ad (adaptive-threshold orig)]
+         (show ad)
+;         (.skeletonize ad)
+;         (show ad)
+         (def bls (->> ad blobs squares))
+         (draw-blobs orig bls)))
 
