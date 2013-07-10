@@ -136,6 +136,8 @@
     (.findConnectedComponents blobs)
     blobs))
 
+(def orig (->> "nono5.jpg" read-image adaptive-threshold))
+
 ;(show-thresholded "nono6.jpg")
 
 ;(show orig)
