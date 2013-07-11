@@ -14,11 +14,25 @@
               (-> (.toArray bytes)
                   (java.io.ByteArrayInputStream.)
                   (ImageIO/read))))
+          (adapt-size [frame mat]
+            (let [w (.width mat)
+                  h (.height mat)
+                  [s-w s-h] (->> (java.awt.Toolkit/getDefaultToolkit)
+                                 .getScreenSize
+                                 ((juxt #(.getWidth %) #(.getHeight %)))
+                                 (map #(* 0.8 %)))
+                  ratio (/ w h)
+                  [m-w m-h] (map #(min %1 %2) [w h] [s-w s-h])]
+              (if (> m-w (* ratio m-h))
+                (.setSize frame (* ratio m-h) m-h)
+                (.setSize frame m-w (/ m-w ratio)))))
           (show-image [im]
             (let [viewer (hu.kazocsaba.imageviewer.ImageViewer. im)
                   fr (javax.swing.JFrame. "Image")]
               (.setStatusBarVisible viewer true)
               (.setPixelatedZoom viewer true)
+              (adapt-size fr mat)
+              (.setLocationRelativeTo fr nil)
               (.. fr getContentPane (add (.getComponent viewer)))
               (.setVisible fr true)
               mat))]
