@@ -1,45 +1,63 @@
 (ns recognition.morphology
-  (:require [recognition
-             [classpath :as classpath]]))
+  (:import org.opencv.imgproc.Imgproc
+           [org.opencv.core Mat Size CvType Scalar Core]))
 
-(classpath/load-libs)
+(recognition.Loader/loadLibrary "opencv_java246")
 
-(import [org.ajdecon.morphology StructElement Morphology])
+(defn struct-element [type [width height]]
+  (let [type (case type
+               :rect Imgproc/MORPH_RECT
+               :ellipse Imgproc/MORPH_ELLIPSE
+               :cross Imgproc/MORPH_CROSS
+               (throw (IllegalArgumentException. (str "Unsupported struct element type " type))))]
+      (Imgproc/getStructuringElement type (Size. width height))))
 
-(defn struct-element
-  "Type :circle or :square - size is an int
-Type :ring, :rect, :line - size is an 2 element vector of ints."
-  [type size & {:keys [bg-white?]
-                :or {bg-white? false}}]
-  (condp contains? type
-    #{:circle :square} (StructElement. (name type) size bg-white?)
-    #{:ring :rect :line} (StructElement. (name type) (first size) (second size) bg-white?)
-    (throw (IllegalArgumentException. (str "type " type " is not supported")))))
+(defn dilate! [mat el]
+  (Imgproc/dilate mat mat el)
+  mat)
 
-(defmacro wrap-proc [body]
-  `(-> (ij.ImagePlus. "temp" ~'proc)
-       ~body
-       .getProcessor))
+(defn erode! [mat el]
+  (Imgproc/erode mat mat el)
+  mat)
 
-(defn erode [proc s]
-  (wrap-proc (Morphology/erode s)))
+(defn- morphology-ex [mat op el]
+  (Imgproc/morphologyEx mat mat op el)
+  mat)
 
-(defn dilate [proc s]
-  (wrap-proc (Morphology/dilate s)))
+(defn open! [mat el]
+  (morphology-ex mat Imgproc/MORPH_OPEN el))
 
-(defn open [proc s]
-  (wrap-proc (Morphology/open s)))
+(defn close! [mat el]
+  (morphology-ex mat Imgproc/MORPH_CLOSE el))
 
-(defn close [proc s]
-  (wrap-proc (Morphology/close s)))
+(defn top-hat! [mat el]
+  (morphology-ex mat Imgproc/MORPH_TOPHAT el))
+
+(defn black-hat! [mat el]
+  (morphology-ex mat Imgproc/MORPH_BLACKHAT el))
+
+(defn skeleton [mat el]
+  (let [mat (.clone mat)
+        skel (Mat. (.size mat) CvType/CV_8UC1 (Scalar. 0.0))
+        temp (Mat. (.size mat) CvType/CV_8UC1)
+        eroded (Mat. (.size mat) CvType/CV_8UC1)]
+    (while (not (zero? (Core/countNonZero mat)))
+      (Imgproc/erode mat eroded el)
+      (Imgproc/dilate eroded temp el)
+      (Core/subtract mat temp temp)
+      (Core/bitwise_or skel temp skel)
+      (.copyTo eroded mat))
+    skel))
 
 #_(do
-    (require '[recognition.core :as c])
-    (def s (struct-element :square 21))
-    (-> (c/duplicate c/orig)
-        (open s)
+    (require '[recognition.opencv :as c])
+    (-> "nono5.jpg"
+        c/read
+        c/adaptive-threshold!
+        c/invert!
+        (skeleton (struct-element :ellipse [3 3]))
+        c/invert!
         c/show)
-    (open (c/duplicate c/orig) s)
-    (c/show c/orig))
+)
 
 

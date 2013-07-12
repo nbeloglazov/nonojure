@@ -1,6 +1,6 @@
 (ns recognition.opencv
   (:import [java.awt.image BufferedImage]
-           [org.opencv.core Mat MatOfByte CvType Scalar]
+           [org.opencv.core Mat MatOfByte CvType Scalar Core]
            org.opencv.highgui.Highgui
            javax.imageio.ImageIO
            org.opencv.imgproc.Imgproc))
@@ -46,7 +46,11 @@
 (defn save [mat file]
   (Highgui/imwrite file mat))
 
-(defn adaptive-threshold [mat]
+(defn invert! [mat]
+  (Core/bitwise_not mat mat)
+  mat)
+
+(defn adaptive-threshold! [mat]
   (let [new (.clone mat)]
     (Imgproc/adaptiveThreshold mat
                                mat
@@ -58,7 +62,7 @@
                                )
     mat))
 
-#_(->> "nono5.jpg" read adaptive-threshold show)
+#_(->> "nono5.jpg" read adaptive-threshold! show)
 
 #_(show (read "nono5.jpg"))
 
