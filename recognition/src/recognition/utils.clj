@@ -1,6 +1,7 @@
-(ns recognition.opencv
+(ns recognition.utils
   (:import [java.awt.image BufferedImage]
-           [org.opencv.core Mat MatOfByte CvType Scalar Core]
+           [org.opencv.core Mat MatOfByte CvType Scalar Core Size]
+           [hu.kazocsaba.imageviewer ImageViewer ResizeStrategy]
            org.opencv.highgui.Highgui
            javax.imageio.ImageIO
            org.opencv.imgproc.Imgproc))
@@ -29,14 +30,29 @@
           (show-image [im]
             (let [viewer (hu.kazocsaba.imageviewer.ImageViewer. im)
                   fr (javax.swing.JFrame. "Image")]
-              (.setStatusBarVisible viewer true)
-              (.setPixelatedZoom viewer true)
+              (doto viewer
+                (.setStatusBarVisible true)
+                (.setPixelatedZoom true)
+                (.setResizeStrategy ResizeStrategy/RESIZE_TO_FIT))
               (adapt-size fr mat)
               (.setLocationRelativeTo fr nil)
               (.. fr getContentPane (add (.getComponent viewer)))
               (.setVisible fr true)
               mat))]
     (show-image (to-image mat))))
+
+(defn to-binary-mat [colls]
+  (-> (apply concat colls)
+      (->>
+       (map #(if (zero? %) 0 -1))
+       (into-array Byte/TYPE))
+      (MatOfByte.)
+      (.reshape 1 (count colls))))
+
+(defn to-vecs [mat]
+  (for [i (range (.rows mat))]
+    (for [j (range (.cols mat))]
+      (-> (.get mat i j) seq first))))
 
 (defn read [file]
   (let [m (Highgui/imread (str "resources/examples/" file))]
@@ -46,23 +62,46 @@
 (defn save [mat file]
   (Highgui/imwrite file mat))
 
+(defn invert [mat dst]
+  (Core/bitwise_not mat dst)
+  dst)
+
 (defn invert! [mat]
-  (Core/bitwise_not mat mat)
+  (invert mat mat))
+
+(defn transpose [mat]
+  (.t mat))
+
+(defn flip! [mat dir]
+  (Core/flip mat mat (case dir
+                       :x 1
+                       :y 0))
   mat)
 
-(defn adaptive-threshold! [mat]
-  (let [new (.clone mat)]
-    (Imgproc/adaptiveThreshold mat
-                               mat
-                               255.0 ; max value
-                               Imgproc/ADAPTIVE_THRESH_MEAN_C
-                               Imgproc/THRESH_BINARY
-                               21 ; size
-                               10 ; - C
-                               )
-    mat))
+(defn clone [mat]
+  (.clone mat))
 
-#_(->> "nono5.jpg" read adaptive-threshold! show)
+(defn subtract [src1 src2 dst]
+  (Core/subtract src1 src2 dst)
+  dst)
 
-#_(show (read "nono5.jpg"))
+(defn rotate90 [mat]
+  (flip! (transpose mat) :x))
 
+(defn zero-mat? [mat]
+  (zero? (Core/countNonZero mat)))
+
+(defn resize! [mat scale]
+  (Imgproc/resize mat mat (Size.) scale scale Imgproc/INTER_LINEAR)
+  mat)
+
+(defn or [src1 src2 dst]
+  (Core/bitwise_or src1 src2 dst)
+  dst)
+
+#_(let [m (to-binary-mat [[1 0 0]
+                        [1 1 0]
+                        [1 1 1]])]
+  (show m)
+  (show   (rotate90 (rotate90 m)))
+  (show m))
