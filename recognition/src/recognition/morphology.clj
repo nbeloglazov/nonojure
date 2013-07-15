@@ -86,12 +86,6 @@
               [-1  1  1]
               [-1 -1  0]]])))
 
-(defn remove-noise [mat]
-  (let [masks (->> (range 5 50 5)
-                   (map #(border-mask % [:left :right :up :down]))
-                   (map hom-mask))]
-    (reduce thinning mat masks)))
-
 (defn skeleton [mat]
   (let [iteration (fn [mat]
                   (reduce thinning mat skeleton-patterns))]

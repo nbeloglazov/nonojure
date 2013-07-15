@@ -1,4 +1,4 @@
-(ns recognition.opencv
+(ns recognition.core
   (:import [org.opencv.core Core]
            org.opencv.imgproc.Imgproc
            org.opencv.utils.Converters)
@@ -96,7 +96,7 @@
 (defn find-intersections [mat]
   (->> cross-patterns
        (map #(mor/hit-or-miss mat %))
-       (reduce #(u/or %1 %2 %2))))
+       (reduce #(u/mat-or %1 %2 %2))))
 
 (defn black-pixels [mat]
   (letfn [(column [idx]
@@ -104,7 +104,7 @@
               (Converters/Mat_to_vector_uchar (.col mat idx) list)
               list))
           (black-pixels [x col]
-            (map-indexed #(if (zero? %2) [%1 x] nil) col))]
+            (map-indexed #(if (zero? %2) [x %1] nil) col))]
     (->> (.cols mat)
          range
          (map column)
@@ -112,22 +112,32 @@
          (apply concat)
          (remove nil?))))
 
-;(def px (black-pixels crs))
 
-#_(->> "nono5.jpg"
+#_(
+
+
+   (->> "nono5.jpg"
       u/read
       fit-to-1000!
       recognition.opencv/adaptive-threshold!
 ;      u/show
       u/invert!
       mor/skeleton
+      u/invert!
+      u/show
+      u/invert!
       find-intersections
       u/invert!
       (def crs)
 ;      u/show
 ;      (remove-noise [:up :left :right])
       )
+   (def px (black-pixels crs))
+   (count px)
 
-#_(-> "nono5.jpg" read adaptive-threshold! show )
+   (u/show crs)
+   )
+
+#_(-> "nono5.jpg" u/read adaptive-threshold! u/show )
 
 #_(show (read "nono5.jpg"))

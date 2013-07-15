@@ -1,6 +1,6 @@
 (ns recognition.utils
   (:import [java.awt.image BufferedImage]
-           [org.opencv.core Mat MatOfByte CvType Scalar Core Size]
+           [org.opencv.core Mat MatOfByte CvType Scalar Core Size Point]
            [hu.kazocsaba.imageviewer ImageViewer ResizeStrategy]
            org.opencv.highgui.Highgui
            javax.imageio.ImageIO
@@ -95,9 +95,29 @@
   (Imgproc/resize mat mat (Size.) scale scale Imgproc/INTER_LINEAR)
   mat)
 
-(defn or [src1 src2 dst]
+(defn mat-or [src1 src2 dst]
   (Core/bitwise_or src1 src2 dst)
   dst)
+
+(defn put-text! [mat text [x y]]
+  (Core/putText mat text (Point. x y) Core/FONT_HERSHEY_SIMPLEX 0.25 (Scalar. 0.0))
+  mat)
+
+(defn draw-square! [mat [x y] size]
+  (let [hs (* 0.5 size)]
+    (Core/rectangle mat (Point. (- x hs) (- y hs))
+                    (Point. (+ x hs) (+ y hs))
+                    (Scalar. 0.0))
+    mat))
+
+(defn draw-circle! [mat [x y] size]
+  (Core/circle mat (Point. x y) (* 0.5 size) (Scalar. 0.0))
+  mat)
+
+#_(-> (Mat/zeros 200 200 CvType/CV_8UC1)
+      (invert!)
+      (put-text! "Hello" [40 40])
+      show)
 
 #_(let [m (to-binary-mat [[1 0 0]
                         [1 1 0]
