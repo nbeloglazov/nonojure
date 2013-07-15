@@ -5,7 +5,7 @@
            javax.imageio.ImageIO
            org.opencv.imgproc.Imgproc))
 
-(recognition.Loader/loadLibrary "opencv_java246")
+(clojure.lang.RT/loadLibrary "opencv_java246")
 
 (defn show [mat]
   (letfn [(to-image [mat]

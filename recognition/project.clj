@@ -14,6 +14,5 @@
                  [hu.kazocsaba/image-viewer "1.2.3"]]
   :repositories [["imagej.releases" "http://maven.imagej.net/content/repositories/releases"]]
   :resource-paths ["resources"]
-  :java-source-paths ["java"]
   :jvm-opts ["-Djava.library.path=resources/native/"]
   :plugins [[lein-localrepo "0.5.2"]])
