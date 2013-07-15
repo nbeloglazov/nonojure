@@ -98,7 +98,7 @@
            (if (visited cur)
              (recur visited rst positions)
              (recur (conj visited cur)
-                    (concat rst (vals (neibs cur)))
+                    (doall (concat rst (vals (neibs cur))))
                     (reduce (fn [positions [dir blob]]
                               (assoc positions blob (move dir cur-pos)))
                             positions
@@ -115,9 +115,9 @@
 
 (defn normalize-component [positions]
   (let [min-pos (->> (vals positions)
-                     (reduce #(map min %1 %2)))]
-    (into {} (for [[blob pos] positions]
-               [blob (map - pos min-pos)]))))
+                     (reduce #(doall (map min %1 %2))))]
+    (into {} (for [[point pos] positions]
+               [point (map - pos min-pos)]))))
 
 (defn find-largest-component [neibs]
   (->> (find-all-components neibs)
@@ -176,7 +176,6 @@
    (def nbs (neibs-all-and-filter c/px))
 
    (def pos (find-largest-component nbs))
-
 
    (nbs [75 874])
    (nbs [90 872])
