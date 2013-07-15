@@ -1,159 +1,133 @@
-(ns recognition.core
-  (:import [ij IJ ImagePlus]
-           [ij.process ImageProcessor ByteProcessor ByteStatistics ImageConverter]
-           [ij.plugin.filter MaximumFinder GaussianBlur EDM])
-  (:require [incanter
-             [core :as core]
-             [charts :as charts]
-             [distributions :as dist]]
-            [clojure.java.io :as io]
-            [recognition
-             [classpath :as classpath]]
-            [kdtree :as kd]))
+(ns recognition.opencv
+  (:import [org.opencv.core Core]
+           org.opencv.imgproc.Imgproc
+           org.opencv.utils.Converters)
+  (:require [recognition
+             [utils :as u]
+             [morphology :as mor]]
+            [incanter
+             [core :as icore]
+             [charts :as icharts]]))
 
-(classpath/load-libs)
+(defn adaptive-threshold! [mat]
+  (let [new (.clone mat)]
+    (Imgproc/adaptiveThreshold mat
+                               mat
+                               255.0 ; max value
+                               Imgproc/ADAPTIVE_THRESH_MEAN_C
+                               Imgproc/THRESH_BINARY
+                               21 ; size
+                               10 ; - C
+                               )
+    mat))
 
-(defn processor [image]
-  (.getProcessor image))
+(defn fit-to-1000! [mat]
+  (let [w (.cols mat)
+        h (.rows mat)]
+    (u/resize! mat (/ 1000 (max w h)))))
 
-(defn image [processor]
-  (ImagePlus. "image" processor))
+(defn border-mask [size borders]
+  (println borders)
+  (letfn [(border?
+            ([y x type]
+               (case type
+                 :left (zero? x)
+                 :right (= (dec size) x)
+                 :up (zero? y)
+                 :down (= (dec size) y)))
+            ([y x]
+               (some true? (map #(border? y x %) borders))))
+          (center? [y x]
+            (= (quot size 2) y x))]
+    (for [y (range size)]
+      (for [x (range size)]
+        (cond (border? y x) -1
+              (center? y x)  1
+              :default       0)))))
 
-(defn show [processor]
-  (.show (image processor)))
+(defn remove-noise [mat & borders]
+  (let [masks (->> (map #(border-mask 8 %) borders)
+                   (map mor/hom-mask))]
+    (loop [cur (reduce mor/thinning mat masks)
+           prev (.clone mat)
+           it 0]
+      (println it)
+      (if (or (u/zero-mat? (u/subtract prev cur prev))
+              (= it 10))
+        cur
+        (recur (reduce mor/thinning cur masks)
+               cur
+               (inc it))))))
 
-(defn statistics [processor]
-  (.getStatistics processor))
+(def cross-patterns
+  (letfn [(parse-and-rotate [mask]
+            (->> (mor/hom-mask mask)
+                 (iterate (partial map u/rotate90))
+                 (take 2)))]
+    (cons (mor/hom-mask [[-1  1 -1]
+                         [ 1  1  1]
+                         [-1  1 -1]])
+          (mapcat parse-and-rotate
+                  [
+                   [[-1  1 -1]
+                    [ 1  1 -1]
+                    [-1  1  1]]
 
-(defn histogram [processor]
-  (vec (.getHistogram (statistics processor))))
+                   [[-1  1  1]
+                    [ 1  1 -1]
+                    [-1  1 -1]]
 
-(defn duplicate [processor]
-  (.duplicate processor))
+                   [[-1 -1  1 -1]
+                    [-1 -1  1  1]
+                    [ 1  1 -1 -1]
+                    [-1  1 -1 -1]]
 
-(defn save [processor path]
-  (-> (image processor)
-      ij.io.FileSaver.
-      (.saveAsPng path)))
+                   [[-1  1 -1 -1]
+                    [-1  1  1  1]
+                    [ 1  1  1 -1]
+                    [-1 -1  1 -1]]
 
-(defn crop [processor x y width height]
-  (.setRoi processor x y width height)
-  (.crop processor))
+                   [[-1 -1  1 -1]
+                    [ 1  1  1 -1]
+                    [-1  1  1  1]
+                    [-1  1 -1 -1]]
+                   ]))))
 
-(defn center-third [processor]
-  (let [w (.getWidth processor)
-        h (.getHeight processor)]
-    (crop processor (/ w 3) (/ h 3) (/ w 3) (/ h 3))))
+(defn find-intersections [mat]
+  (->> cross-patterns
+       (map #(mor/hit-or-miss mat %))
+       (reduce #(u/or %1 %2 %2))))
 
-(defn find-maxima-on-image
-  "Findx local maxima of image and return instance of ByteProcessor where 255 - max. 0 - otherwise."
-  [processor]
-  (let [maximum-finder (MaximumFinder.)
-        tolerance 2.0
-        threshold ImageProcessor/NO_THRESHOLD
-        output-type MaximumFinder/SINGLE_POINTS
-        orig-proc (.convertToFloat processor)]
-    (.findMaxima maximum-finder orig-proc tolerance threshold output-type true true)))
+(defn black-pixels [mat]
+  (letfn [(column [idx]
+            (let [list (java.util.ArrayList.)]
+              (Converters/Mat_to_vector_uchar (.col mat idx) list)
+              list))
+          (black-pixels [x col]
+            (map-indexed #(if (zero? %2) [%1 x] nil) col))]
+    (->> (.cols mat)
+         range
+         (map column)
+         (map-indexed black-pixels)
+         (apply concat)
+         (remove nil?))))
 
-(defn to-grayscale [image]
-  (let [conv (ImageConverter. image)]
-    (.convertToGray8 conv)
-    image))
+;(def px (black-pixels crs))
 
-(defn gaussian-blur [processor]
-  (let [gaussian (GaussianBlur.)]
-    (.blurGaussian gaussian processor 1 1 0.01)
-    processor))
+#_(->> "nono5.jpg"
+      u/read
+      fit-to-1000!
+      recognition.opencv/adaptive-threshold!
+;      u/show
+      u/invert!
+      mor/skeleton
+      find-intersections
+      u/invert!
+      (def crs)
+;      u/show
+;      (remove-noise [:up :left :right])
+      )
 
-(defn invert [processor]
-  (.invert processor)
-  processor)
+#_(-> "nono5.jpg" read adaptive-threshold! show )
 
-(defn distance-map [processor]
-  (let [edm (EDM.)]
-    (.toEDM edm processor)
-    processor))
-
-(defn read-image [file]
-  (->> file
-       (str "examples/")
-       io/resource
-       javax.imageio.ImageIO/read
-       (ImagePlus. file)
-       to-grayscale
-       processor))
-
-(defn adaptive-threshold [proc]
-  (let [thresholder (fiji.threshold.Auto_Local_Threshold.)
-        im (image (duplicate proc))]
-    (-> (.exec thresholder im "Mean" 20 10 0 true)
-        seq
-        first
-        processor)))
-
-(defn opening [proc]
-  (doto proc .erode .dilate))
-
-(defn closing [proc]
-  (doto proc .dilate .erod))
-
-(defn squares [blobs]
-  (let [circ-convex (fn [blob]
-                      (let [conv-perm (.getPerimeterConvexHull blob)
-                            area (.getEnclosedArea blob)]
-                        (/ (* conv-perm conv-perm) area)))
-        circ-sq? #(<= 12 (circ-convex %) 20)
-        sqs (->> blobs
-                 (filter circ-sq?)
-                 (filter #(> (.getEnclosedArea %) 100))
-                 (sort-by #(.getEnclosedArea %)))
-        n (count sqs)
-        mean-area (->> sqs
-                       (drop (/ n 10))
-                       (drop-last (/ n 10))
-                       (map #(.getEnclosedArea %))
-                       (dist/mean))
-        area-fits? #(<= (* 0.8 mean-area) (.getEnclosedArea %) (* 1.2 mean-area))]
-    (filter area-fits? sqs)))
-
-(defn draw-blobs [proc blobs]
-  (let [dup (duplicate proc)]
-    (.setColor dup 0xFFFFFF)
-    (.fill dup)
-    (doseq [bl blobs]
-      (.draw bl dup 1))
-    (show dup)))
-
-(defn show-thresholded [image]
-  (-> image
-      read-image
-      adaptive-threshold
-      show))
-
-(defn blobs [bin-proc]
-  (let [dup (invert (duplicate bin-proc))
-        blobs (ij.blob.ManyBlobs. (image dup))]
-    (.findConnectedComponents blobs)
-    blobs))
-
-(def orig (->> "nono5.jpg" read-image adaptive-threshold))
-
-;(show-thresholded "nono6.jpg")
-
-;(show orig)
-
-(def images (map #(str "nono" % ".jpg") (range 4 13)))
-
-#_(doseq [im images]
-  (show-thresholded im))
-
-
-;(show orig)
-#_ (do (def orig (read-image "nono5.jpg"))
-       (let [ad (adaptive-threshold orig)]
-         (show ad)
-;         (.skeletonize ad)
-;         (show ad)
-         (def bls (->> ad blobs squares))
-         (draw-blobs orig bls)))
-
+#_(show (read "nono5.jpg"))
