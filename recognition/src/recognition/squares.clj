@@ -76,10 +76,10 @@
 (defn move [dir pos]
   (map + pos
        (case dir
-         :left [0 -1]
-         :right [0 1]
-         :up [-1 0]
-         :down [1 0])))
+         :left [-1 0]
+         :right [1 0]
+         :up [0 -1]
+         :down [0 1])))
 
 (def op-dir {:left :right
              :right :left
@@ -171,11 +171,28 @@
                              (clojure.set/map-invert missing-pos))]
     [new-neibs new-positions]))
 
+(defn find-boundaries [neibs positions]
+  (let [boundary (fn [dir aggr selector]
+                   (->> neibs
+                        (remove #(contains? (second %) dir))
+                        (map #(positions (first %)))
+                        (map selector)
+                        frequencies
+                        (sort-by last)
+                        last
+                        first))]
+    {:left (boundary :left min first)
+     :right (boundary :right max first)
+     :up (boundary :up min second)
+     :down (boundary :down max second)}))
+
 #_(
 
    (def nbs (neibs-all-and-filter c/px))
 
    (def pos (find-largest-component nbs))
+
+   (find-boundaries nbs pos)
 
    (nbs [75 874])
    (nbs [90 872])
@@ -198,6 +215,14 @@
    (mrgd [49 251])
 
    (u/show c/crs)
+
+   (->> nbs
+        (remove #(contains? (second %) :left))
+        keys)
+
+   (let [[new-nbs new-pos] (find-and-add-missing nbs pos)]
+     (def nbs new-nbs)
+     (def pos new-pos))
 
    (let [nbs (select-keys nbs (keys pos))
          [new-nbs new-pos] (find-and-add-missing nbs pos)
