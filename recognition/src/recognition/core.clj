@@ -133,7 +133,7 @@
 ;      (remove-noise [:up :left :right])
       )
 
-   (def px (black-pixels crs))
+   (def px (doall (black-pixels crs)))
    (count px)
 
    (u/show crs)
