@@ -28,7 +28,7 @@
                 (.setSize frame (* ratio m-h) m-h)
                 (.setSize frame m-w (/ m-w ratio)))))
           (show-image [im]
-            (let [viewer (hu.kazocsaba.imageviewer.ImageViewer. im)
+            (let [viewer (ImageViewer. im)
                   frame (javax.swing.JFrame. "Image")]
               (doto viewer
                 (.setStatusBarVisible true)
