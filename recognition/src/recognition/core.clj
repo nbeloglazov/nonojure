@@ -119,7 +119,7 @@
    (->> "nono5.jpg"
       u/read
       fit-to-1000!
-      recognition.opencv/adaptive-threshold!
+      adaptive-threshold!
 ;      u/show
       u/invert!
       mor/skeleton
@@ -132,7 +132,8 @@
 ;      u/show
 ;      (remove-noise [:up :left :right])
       )
-   (def px (black-pixels crs))
+
+   (def px (doall (black-pixels crs)))
    (count px)
 
    (u/show crs)

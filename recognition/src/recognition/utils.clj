@@ -115,6 +115,10 @@
   (Core/circle mat (Point. x y) (* 0.5 size) (Scalar. 0.0))
   mat)
 
+(defn draw-line! [mat [x0 y0] [x1 y1]]
+  (Core/line mat (Point. x0 y0) (Point. x1 y1) (Scalar. 0.0))
+  mat)
+
 #_(-> (Mat/zeros 200 200 CvType/CV_8UC1)
       (invert!)
       (put-text! "Hello" [40 40])

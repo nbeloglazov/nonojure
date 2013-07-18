@@ -76,10 +76,10 @@
 (defn move [dir pos]
   (map + pos
        (case dir
-         :left [0 -1]
-         :right [0 1]
-         :up [-1 0]
-         :down [1 0])))
+         :left [-1 0]
+         :right [1 0]
+         :up [0 -1]
+         :down [0 1])))
 
 (def op-dir {:left :right
              :right :left
@@ -98,7 +98,7 @@
            (if (visited cur)
              (recur visited rst positions)
              (recur (conj visited cur)
-                    (concat rst (vals (neibs cur)))
+                    (doall (concat rst (vals (neibs cur))))
                     (reduce (fn [positions [dir blob]]
                               (assoc positions blob (move dir cur-pos)))
                             positions
@@ -115,9 +115,9 @@
 
 (defn normalize-component [positions]
   (let [min-pos (->> (vals positions)
-                     (reduce #(map min %1 %2)))]
-    (into {} (for [[blob pos] positions]
-               [blob (map - pos min-pos)]))))
+                     (reduce #(doall (map min %1 %2))))]
+    (into {} (for [[point pos] positions]
+               [point (map - pos min-pos)]))))
 
 (defn find-largest-component [neibs]
   (->> (find-all-components neibs)
@@ -171,26 +171,79 @@
                              (clojure.set/map-invert missing-pos))]
     [new-neibs new-positions]))
 
+(defn find-boundaries [positions]
+  (let [positions (set positions)
+        boundary (fn [dir aggr selector]
+                   (->> positions
+                        (remove #(contains? positions (move dir %)))
+                        (map selector)
+                        frequencies
+                        (sort-by last)
+                        last
+                        first))]
+    {:left (boundary :left min first)
+     :right (boundary :right max first)
+     :up (boundary :up min second)
+     :down (boundary :down max second)}))
+
+(defn extrapolate [coord-by-pos pos dir]
+  (if-let [neib (-> (op-dir dir)
+                    (move pos)
+                    coord-by-pos)]
+    (map + (coord-by-pos pos)
+         (map - (coord-by-pos pos) neib))
+    nil))
+
+(extrapolate {[0 0] [0 0] [1 0] [1012 0]} [1 0] :right)
+
+(defn add-borders
+  ([coord-by-pos dir on-border?]
+     (->> (for [pos (keys coord-by-pos)
+                :when (and (on-border? pos)
+                           (not (contains? coord-by-pos (move dir pos))))
+                :let [new-neib (extrapolate coord-by-pos pos dir)]
+                :when new-neib]
+            [(move dir pos) new-neib])
+          (into coord-by-pos)))
+  ([coord-by-pos]
+     (let [{:keys [left right up down]} (find-boundaries (keys coord-by-pos))]
+       (reduce #(apply add-borders %1 %2) coord-by-pos
+               [[:left #(= left (first %))]
+                [:right #(= right (first %))]
+                [:up #(= up (second %))]
+                [:down #(= down (second %))]]))))
+
+(defn build-squares [coord-by-pos]
+  (letfn [(build [pos]
+            (let [square (map coord-by-pos [pos
+                                            (move :right pos)
+                                            (move :down (move :right pos))
+                                            (move :down pos)])]
+              (if (some nil? square)
+                nil
+                square)))]
+    (into {} (for [pos (keys coord-by-pos)
+                   :let [sq (build pos)]
+                   :when sq]
+               [pos sq]))))
+
 #_(
 
    (def nbs (neibs-all-and-filter c/px))
 
    (def pos (find-largest-component nbs))
 
+   (let [nbs (neibs-all-and-filter c/px)
+         pos (find-largest-component nbs)
+         [new-nbs new-pos] (find-and-add-missing nbs pos)]
+     (def nbs new-nbs)
+     (def pos new-pos)
+     (def sqs (->> new-pos
+                   clojure.set/map-invert
+                   add-borders
+                   build-squares)))
 
-   (nbs [75 874])
-   (nbs [90 872])
-
-   (nbs [49 251])
-
-   (pos [75 874])
-   (pos [90 872])
-
-   (def nbs-fil (select-keys nbs (keys pos)))
-
-   (def mis (missing-neibs pos nbs-fil))
-
-   (def mis-pos (calc-real-positions mis))
+   (find-boundaries (set (vals pos)))
 
    (def mrgd (merge-neibs-with-missing nbs mis mis-pos))
 
@@ -199,6 +252,37 @@
    (mrgd [49 251])
 
    (u/show c/crs)
+
+   (->> nbs
+        (remove #(contains? (second %) :left))
+        keys)
+
+   (defn draw! [mat type points]
+     (let [draw-fn (case type
+                     :circle #(u/draw-circle! %1 %2 10)
+                     :square #(u/draw-square! %1 %2 10))]
+       (reduce draw-fn mat points)))
+
+   (defn draw-quad! [mat [p1 p2 p3 p4]]
+     (reduce #(apply u/draw-line! %1 %2) mat
+             [[p1 p2]
+              [p2 p3]
+              [p3 p4]
+              [p4 p1]]))
+
+   (let [cl (.clone c/crs)]
+     (reduce draw-quad! cl (vals sqs))
+     (u/show cl))
+
+   (add-borders (clojure.set/map-invert pos))
+
+   (let [cl (.clone c/crs)
+         new-pos (add-borders (clojure.set/map-invert pos))
+         diff (clojure.set/difference (set (vals new-pos))
+                                      (set (keys pos)))]
+     (draw! cl :circle (keys pos))
+     (draw! cl :square diff)
+     (u/show cl))
 
    (let [nbs (select-keys nbs (keys pos))
          [new-nbs new-pos] (find-and-add-missing nbs pos)
