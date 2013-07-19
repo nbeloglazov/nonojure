@@ -1,6 +1,5 @@
 (ns recognition.squares
   (:require [recognition
-             [core :as c]
              [utils :as u]]
             [kdtree :as kd]
             [incanter
@@ -8,20 +7,6 @@
              [charts :as charts]
              [stats :as stats]]
             clojure.set))
-
-(defn has-digit? [blob]
-  (let [sq-size (core/sqrt (.getEnclosedArea blob))]
-   (letfn [(contour-height [pol]
-             (let [rect (.getBounds pol)]
-               (- (.getMaxY rect) (.getMinY rect))))
-           (digit? [pol]
-             (> (contour-height pol) (* 0.5 sq-size)))
-           (has-cavity? [blob]
-             (> (.getPerimeter blob) (* 1.2 (.getPerimeterConvexHull blob))))]
-     (or (->> (.getInnerContours blob)
-              (map digit?)
-              (some true?))
-         (has-cavity? blob)))))
 
 (defn direction [[f-x f-y] [t-x t-y]]
   (let [angle (core/atan2 (- t-y f-y) (- t-x f-x))
@@ -177,10 +162,7 @@
                    (->> positions
                         (remove #(contains? positions (move dir %)))
                         (map selector)
-                        frequencies
-                        (sort-by last)
-                        last
-                        first))]
+                        u/majority))]
     {:left (boundary :left min first)
      :right (boundary :right max first)
      :up (boundary :up min second)
@@ -262,13 +244,6 @@
                      :circle #(u/draw-circle! %1 %2 10)
                      :square #(u/draw-square! %1 %2 10))]
        (reduce draw-fn mat points)))
-
-   (defn draw-quad! [mat [p1 p2 p3 p4]]
-     (reduce #(apply u/draw-line! %1 %2) mat
-             [[p1 p2]
-              [p2 p3]
-              [p3 p4]
-              [p4 p1]]))
 
    (let [cl (.clone c/crs)]
      (reduce draw-quad! cl (vals sqs))

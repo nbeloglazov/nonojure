@@ -4,10 +4,12 @@
            org.opencv.utils.Converters)
   (:require [recognition
              [utils :as u]
-             [morphology :as mor]]
+             [morphology :as mor]
+             [squares :as sq]]
             [incanter
              [core :as icore]
-             [charts :as icharts]]))
+             [charts :as icharts]]
+            clojure.set))
 
 (defn adaptive-threshold! [mat]
   (let [new (.clone mat)]
@@ -112,9 +114,48 @@
          (apply concat)
          (remove nil?))))
 
+(defn has-digit? [mat [[x1 y1] _ [x2 y2] _]]
+  (let [width (quot (- x2 x1) 4)
+        height (quot (- y2 y1) 4)
+        sample (.submat mat (+ y1 height) (+ y1 height height height)
+                            (+ x1 width)  (+ x1 width width width))
+        area (* (.cols sample) (.rows sample))
+        black-pixels (- area (Core/countNonZero sample))]
+    (> black-pixels 3)))
+
+(defn largest-same-kind-seq [kind-fn positions selector good-pos?]
+  (->> (filter #(good-pos? (first %)) positions)
+       (sort-by #(selector (first %)))
+       (partition-by #(kind-fn (second %)))
+       (sort-by count)
+       (last)
+       (map first)
+       (map selector)
+       ((fn [vals] [(first vals) (last vals)]))))
+
+(defn find-work-field [mat positions]
+  (let [[width height] (->> (keys positions)
+                            (reduce #(doall (map max %1 %2))))
+        [x1 x2] (largest-same-kind-seq #(has-digit? mat %)
+                                       positions
+                                       first
+                                       #(= (last %) (quot height 2)))
+        [y1 y2] (largest-same-kind-seq #(has-digit? mat %)
+                                       positions
+                                       second
+                                       #(= (first %) (quot width 2)))]
+    [[x1 y1] [x2 y2]]))
+
+(defn draw-quad! [mat [p1 p2 p3 p4]]
+     (reduce #(apply u/draw-line! %1 %2) mat
+             [[p1 p2]
+              [p2 p3]
+              [p3 p4]
+              [p4 p1]]))
 
 #_(
 
+   (sqs [1 4])
 
    (->> "nono5.jpg"
       u/read
@@ -125,6 +166,7 @@
       mor/skeleton
       u/invert!
       u/show
+      (#(do (def im (.clone %)) %))
       u/invert!
       find-intersections
       u/invert!
@@ -133,10 +175,31 @@
 ;      (remove-noise [:up :left :right])
       )
 
+   (let [cl (.clone crs)]
+     (->> (vals sqs)
+;          (filter #(has-digit? im %))
+          (reduce draw-quad! cl)
+          (u/show)))
+
+   (u/show im)
+
    (def px (doall (black-pixels crs)))
    (count px)
 
+   (let [nbs (sq/neibs-all-and-filter px)
+         pos (sq/find-largest-component nbs)
+         [new-nbs new-pos] (sq/find-and-add-missing nbs pos)]
+     (def nbs new-nbs)
+     (def pos new-pos)
+     (def sqs (->> new-pos
+                   clojure.set/map-invert
+                   sq/add-borders
+                   sq/build-squares)))
+
    (u/show crs)
+
+   (find-work-field im sqs)
+
    )
 
 #_(-> "nono5.jpg" u/read adaptive-threshold! u/show )
