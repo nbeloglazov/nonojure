@@ -28,16 +28,17 @@
                 (.setSize frame (* ratio m-h) m-h)
                 (.setSize frame m-w (/ m-w ratio)))))
           (show-image [im]
-            (let [viewer (hu.kazocsaba.imageviewer.ImageViewer. im)
-                  fr (javax.swing.JFrame. "Image")]
+            (let [viewer (ImageViewer. im)
+                  frame (javax.swing.JFrame. "Image")]
               (doto viewer
                 (.setStatusBarVisible true)
                 (.setPixelatedZoom true)
                 (.setResizeStrategy ResizeStrategy/RESIZE_TO_FIT))
-              (adapt-size fr mat)
-              (.setLocationRelativeTo fr nil)
-              (.. fr getContentPane (add (.getComponent viewer)))
-              (.setVisible fr true)
+              (doto frame
+                (adapt-size mat)
+                (.setLocationRelativeTo nil)
+                (..  getContentPane (add (.getComponent viewer)))
+                (.setVisible true))
               mat))]
     (show-image (to-image mat))))
 
