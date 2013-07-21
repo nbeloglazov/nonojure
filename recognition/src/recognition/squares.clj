@@ -99,16 +99,15 @@
       (conj (find-all-components left) comp))))
 
 (defn normalize-component [positions]
-  (let [min-pos (->> (vals positions)
+  (let [min-pos (->> (keys positions)
                      (reduce #(doall (map min %1 %2))))]
-    (into {} (for [[point pos] positions]
-               [point (map - pos min-pos)]))))
+    (into {} (for [[pos point] positions]
+               [(map - pos min-pos) point]))))
 
 (defn find-largest-component [neibs]
   (->> (find-all-components neibs)
        (sort-by count)
-       last
-       normalize-component))
+       last))
 
 (defn missing-neibs [positions neibs]
   (letfn [(neib-pos [point dir]
@@ -168,22 +167,22 @@
      :up (boundary :up min second)
      :down (boundary :down max second)}))
 
-(defn extrapolate [coord-by-pos pos dir]
-  (if-let [neib (-> (op-dir dir)
-                    (move pos)
-                    coord-by-pos)]
-    (map + (coord-by-pos pos)
-         (map - (coord-by-pos pos) neib))
-    nil))
-
-(extrapolate {[0 0] [0 0] [1 0] [1012 0]} [1 0] :right)
+(defn extrapolate [coord-by-pos pos]
+  (let [extr (for [dir [:left :right :up :down]
+                   :let [closest (coord-by-pos (move dir pos))
+                         farthest (coord-by-pos (move dir (move dir pos)))]
+                   :when (and closest farthest)]
+               (map + closest (map - closest farthest)))]
+    (if-not (empty? extr)
+      (map stats/mean (apply map vector extr))
+      nil)))
 
 (defn add-borders
   ([coord-by-pos dir on-border?]
      (->> (for [pos (keys coord-by-pos)
                 :when (and (on-border? pos)
                            (not (contains? coord-by-pos (move dir pos))))
-                :let [new-neib (extrapolate coord-by-pos pos dir)]
+                :let [new-neib (extrapolate coord-by-pos (move dir pos))]
                 :when new-neib]
             [(move dir pos) new-neib])
           (into coord-by-pos)))
@@ -239,11 +238,7 @@
         (remove #(contains? (second %) :left))
         keys)
 
-   (defn draw! [mat type points]
-     (let [draw-fn (case type
-                     :circle #(u/draw-circle! %1 %2 10)
-                     :square #(u/draw-square! %1 %2 10))]
-       (reduce draw-fn mat points)))
+   
 
    (let [cl (.clone c/crs)]
      (reduce draw-quad! cl (vals sqs))

@@ -1,5 +1,5 @@
 (ns recognition.core
-  (:import [org.opencv.core Core]
+  (:import [org.opencv.core Core Mat]
            org.opencv.imgproc.Imgproc
            org.opencv.utils.Converters)
   (:require [recognition
@@ -29,7 +29,6 @@
     (u/resize! mat (/ 1000 (max w h)))))
 
 (defn border-mask [size borders]
-  (println borders)
   (letfn [(border?
             ([y x type]
                (case type
@@ -47,19 +46,11 @@
               (center? y x)  1
               :default       0)))))
 
-(defn remove-noise [mat & borders]
-  (let [masks (->> (map #(border-mask 8 %) borders)
+(defn remove-noise [mat]
+  (let [masks (->> [3 7 11]
+                   (map #(border-mask % [:left :right :up :down]))
                    (map mor/hom-mask))]
-    (loop [cur (reduce mor/thinning mat masks)
-           prev (.clone mat)
-           it 0]
-      (println it)
-      (if (or (u/zero-mat? (u/subtract prev cur prev))
-              (= it 10))
-        cur
-        (recur (reduce mor/thinning cur masks)
-               cur
-               (inc it))))))
+    (reduce mor/thinning mat masks)))
 
 (def cross-patterns
   (letfn [(parse-and-rotate [mask]
@@ -146,6 +137,43 @@
                                        #(= (first %) (quot width 2)))]
     [[x1 y1] [x2 y2]]))
 
+(defn add-missing-points [[[lu-x lu-y] [rd-x rd-y]] positions]
+     (let [exist (set (keys positions))
+           up-digits (for [x (range lu-x (inc rd-x))
+                           y (range 0 (inc lu-y))
+                           :when (not (exist [x y]))]
+                       [x y])
+           left-digits (for [x (range 0 (inc rd-x))
+                             y (range lu-y (inc rd-y))
+                             :when (not (exist [x y]))]
+                         [x y])
+           missing (concat up-digits left-digits)
+           num-of-neibs (fn [pos positions]
+                          (->> [:left :right :up :down]
+                               (map #(sq/move % pos))
+                               (map positions)
+                               (remove nil?)
+                               count))]
+       (loop [positions positions
+              missing missing]
+         (if (empty? missing)
+           positions
+           (let [[fst & rst] (sort-by #(- (num-of-neibs % positions)) missing)]
+             (recur (assoc positions fst (sq/extrapolate positions fst))
+                    rst))))))
+
+(defn get-squares-with-digits [mat squares [[lu-x lu-y] [rd-x rd-y]]]
+     (letfn [(digit-seq [start dir]
+               (->> (iterate #(sq/move dir %) start)
+                    (map squares)
+                    (take-while #(not (nil? %)))
+                    (take-while #(has-digit? mat %))
+                    reverse))]
+       {:up (for [x (range lu-x (inc rd-x))]
+              (digit-seq [x (dec lu-y)] :up))
+        :left (for [y (range lu-y (inc rd-y))]
+                (digit-seq [(dec lu-x) y] :left))}))
+
 (defn draw-quad! [mat [p1 p2 p3 p4]]
      (reduce #(apply u/draw-line! %1 %2) mat
              [[p1 p2]
@@ -153,9 +181,50 @@
               [p3 p4]
               [p4 p1]]))
 
-#_(
+(defn draw-squares [mat sqs]
+  (doseq [sq sqs]
+    (draw-quad! mat sq)))
 
-   (sqs [1 4])
+
+(defn draw! [mat type points]
+     (let [draw-fn (case type
+                     :circle #(u/draw-circle! %1 %2 10)
+                     :square #(u/draw-square! %1 %2 10))]
+       (reduce draw-fn mat points)))
+
+(defn white [mat]
+  (u/invert! (Mat/zeros (.rows mat) (.cols mat) (.type mat))))
+
+
+(defn parse-structure [mat]
+  (let [intersections (->> (.clone mat)
+                           u/invert!
+                           find-intersections
+                           u/invert!
+                           black-pixels)
+        nbs (sq/neibs-all-and-filter intersections)
+        pos (sq/find-largest-component nbs)
+        _ (let [cl (white mat)]
+            (draw! cl :circle (keys pos))
+;            (u/show cl)
+            )
+        [nbs pos] (sq/find-and-add-missing nbs pos)
+        pos (->> (clojure.set/map-invert pos)
+                 sq/add-borders
+                 sq/normalize-component)
+        squares (sq/build-squares pos)
+        _ (def sqs squares)
+        field (find-work-field mat squares)
+        pos (add-missing-points field pos)
+        squares (sq/build-squares pos)
+        _ (let [cl (white mat)]
+            (draw-squares cl (vals squares))
+;            (u/show cl)
+            )
+        nono (get-squares-with-digits mat squares field)
+        size (map - (second field) (first field) [-1 -1])]
+    (assoc nono :size size)))
+#_(
 
    (->> "nono5.jpg"
       u/read
@@ -164,16 +233,23 @@
 ;      u/show
       u/invert!
       mor/skeleton
+      remove-noise
       u/invert!
       u/show
-      (#(do (def im (.clone %)) %))
-      u/invert!
-      find-intersections
-      u/invert!
-      (def crs)
-;      u/show
-;      (remove-noise [:up :left :right])
-      )
+      (def im))
+
+   (u/show im)
+
+   (time (def strut (parse-structure im)))
+
+   (:size strut)
+
+   (u/show im)
+
+   (let [cl (white im)]
+     (doseq [sqs (mapcat strut [:left :up])]
+       (draw-squares cl sqs))
+     (u/show cl))
 
    (let [cl (.clone crs)]
      (->> (vals sqs)
@@ -184,17 +260,24 @@
    (u/show im)
 
    (def px (doall (black-pixels crs)))
-   (count px)
 
-   (let [nbs (sq/neibs-all-and-filter px)
-         pos (sq/find-largest-component nbs)
-         [new-nbs new-pos] (sq/find-and-add-missing nbs pos)]
-     (def nbs new-nbs)
-     (def pos new-pos)
-     (def sqs (->> new-pos
+   (let [
+         ]
+     (def nbs nbs)
+     (def pos pos)
+     (def sqs (->> pos
                    clojure.set/map-invert
                    sq/add-borders
                    sq/build-squares)))
+
+   (let []
+     (map count (:left nono))
+;     (get-squares-with-digits im sqs field)
+#_     (let [cl (.clone crs)]
+       (->> (vals sqs)
+            (filter #(has-digit? im %))
+            (reduce draw-quad! cl)
+            (u/show))))
 
    (u/show crs)
 
