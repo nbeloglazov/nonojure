@@ -226,10 +226,14 @@
     (assoc nono :size size)))
 #_(
 
+   (defn ddef [im]
+     (def orig (.clone im))
+     im)
    (->> "nono5.jpg"
       u/read
       fit-to-1000!
       adaptive-threshold!
+      ddef
 ;      u/show
       u/invert!
       mor/skeleton
@@ -238,9 +242,13 @@
       u/show
       (def im))
 
-   (u/show im)
+   (u/show orig)
 
    (time (def strut (parse-structure im)))
+
+   (def ex (-> strut :left (nth 2) (nth 2)))
+
+   (u/show (u/quad-to-rect orig ex [30 30]))
 
    (:size strut)
 

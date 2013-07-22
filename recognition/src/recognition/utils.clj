@@ -1,6 +1,6 @@
 (ns recognition.utils
   (:import [java.awt.image BufferedImage]
-           [org.opencv.core Mat MatOfByte CvType Scalar Core Size Point]
+           [org.opencv.core Mat MatOfByte CvType Scalar Core Size Point MatOfPoint2f]
            [hu.kazocsaba.imageviewer ImageViewer ResizeStrategy]
            org.opencv.highgui.Highgui
            javax.imageio.ImageIO
@@ -125,14 +125,20 @@
        last
        first))
 
-#_(-> (Mat/zeros 200 200 CvType/CV_8UC1)
-      (invert!)
-      (put-text! "Hello" [40 40])
-      show)
+(defn mat-of-points [points]
+  (let [m (MatOfPoint2f.)
+        point (fn [[x y]] (Point. x y))]
+    (.fromList m (map point points))
+    m))
 
-#_(let [m (to-binary-mat [[1 0 0]
-                        [1 1 0]
-                        [1 1 1]])]
-  (show m)
-  (show   (rotate90 (rotate90 m)))
-  (show m))
+(defn perspective-transform [from to]
+  (let [from (mat-of-points from)
+        to (mat-of-points to)]
+    (Imgproc/getPerspectiveTransform from to)))
+
+(defn quad-to-rect [mat quad [rect-width rect-height]]
+  (let [transf (perspective-transform quad
+                                      [[0 0] [rect-width 0] [rect-width rect-height] [0 rect-height]])
+        res (Mat. rect-height rect-width CvType/CV_8UC1)]
+    (Imgproc/warpPerspective mat res transf (Size. rect-width rect-height) Imgproc/INTER_NEAREST)
+    res))
