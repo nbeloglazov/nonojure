@@ -168,11 +168,12 @@
                     (map squares)
                     (take-while #(not (nil? %)))
                     (take-while #(has-digit? mat %))
-                    reverse))]
-       {:up (for [x (range lu-x (inc rd-x))]
-              (digit-seq [x (dec lu-y)] :up))
-        :left (for [y (range lu-y (inc rd-y))]
-                (digit-seq [(dec lu-x) y] :left))}))
+                    reverse
+                    vec))]
+       {:up (vec (for [x (range lu-x (inc rd-x))]
+                   (digit-seq [x (dec lu-y)] :up)))
+        :left (vec (for [y (range lu-y (inc rd-y))]
+                     (digit-seq [(dec lu-x) y] :left)))}))
 
 (defn draw-quad! [mat [p1 p2 p3 p4]]
      (reduce #(apply u/draw-line! %1 %2) mat
@@ -224,7 +225,24 @@
         nono (get-squares-with-digits mat squares field)
         size (map - (second field) (first field) [-1 -1])]
     (assoc nono :size size)))
+
+(defn valid-nono? [nono]
+  (letfn [(sum [part]
+            (apply + (flatten (part nono))))]
+    (- (sum :left) (sum :up))))
+
 #_(
+
+   (extract-digit-images "nono5")
+   (require '[clojure.edn :as edn])
+   (require '[clojure.java.io :as io])
+
+
+   (->> "parsed/nono8.clj"
+        io/resource
+        slurp
+        edn/read-string
+        valid-nono?)
 
    (defn ddef [im]
      (def orig (.clone im))
