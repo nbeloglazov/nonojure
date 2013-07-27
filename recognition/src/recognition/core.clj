@@ -207,9 +207,13 @@
         pos (sq/find-largest-component nbs)
         _ (let [cl (white mat)]
             (draw! cl :circle (keys pos))
-;            (u/show cl)
+            ;(u/show cl)
             )
         [nbs pos] (sq/find-and-add-missing nbs pos)
+        _ (let [cl (white mat)]
+            (draw! cl :circle (keys pos))
+;            (u/show cl)
+            )
         pos (->> (clojure.set/map-invert pos)
                  sq/add-borders
                  sq/normalize-component)
@@ -238,16 +242,18 @@
    (require '[clojure.java.io :as io])
 
 
-   (->> "parsed/nono8.clj"
+   (->> "parsed/nono6.clj"
         io/resource
         slurp
         edn/read-string
-        valid-nono?)
+        valid-nono?
+        )
+
 
    (defn ddef [im]
      (def orig (.clone im))
      im)
-   (->> "nono5.jpg"
+   (->> "nono7.jpg"
       u/read
       fit-to-1000!
       adaptive-threshold!

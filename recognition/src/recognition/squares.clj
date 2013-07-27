@@ -148,12 +148,14 @@
 
 (defn find-and-add-missing [neibs positions]
   (let [neibs (select-keys neibs (keys positions))
-        missing (missing-neibs positions neibs)
-        missing-pos (calc-real-positions missing)
-        new-neibs (merge-neibs-with-missing neibs missing missing-pos)
-        new-positions (merge positions
-                             (clojure.set/map-invert missing-pos))]
-    [new-neibs new-positions]))
+        missing (missing-neibs positions neibs)]
+    (if (empty? missing)
+      [neibs positions]
+      (let [missing-pos (calc-real-positions missing)
+            new-neibs (merge-neibs-with-missing neibs missing missing-pos)
+            new-positions (merge positions
+                                 (clojure.set/map-invert missing-pos))]
+        (recur new-neibs new-positions)))))
 
 (defn find-boundaries [positions]
   (let [positions (set positions)
