@@ -40,8 +40,8 @@
         im (->> (.clone orig) u/invert! mor/skeleton c/remove-noise u/invert!)
         real-nono (->> (str "parsed/" name ".clj") io/resource slurp edn/read-string)
         nono (c/parse-structure im)
-        dig-filename (fn [value part ind1 ind2]
-                       (format "train-set/%d.%s_%s_%d_%d.png" value name (clojure.core/name part) ind1 ind2))
+        dig-filename (fn [value part ind1 ind2 other]
+                       (format "test-set/%d.%s_%s_%d_%d%s.png" value name (clojure.core/name part) ind1 ind2 other))
         process-part (fn [part]
                        (let [n-part (nono part)
                              rn-part (real-nono part)]
@@ -49,10 +49,13 @@
                                  :when (= (count (n-part ind1))
                                           (count (rn-part ind1)))
                                  ind2 (range (count (n-part ind1)))]
-                           (let [value (get-in rn-part [ind1 ind2])]
-                             (when (< value 10)
-                               (u/save (clear-borders! (u/quad-to-rect orig (get-in n-part [ind1 ind2]) [size size]))
-                                       (dig-filename value part ind1 ind2)))))))]
+                           (let [value (get-in rn-part [ind1 ind2])
+                                 digit (clear-borders! (u/quad-to-rect orig (get-in n-part [ind1 ind2]) [size size]))]
+                             (if (< value 10)
+                               (u/save digit (dig-filename value part ind1 ind2 ""))
+                               (let [[left right] (separate digit (find-separator digit))]
+                                 (u/save left (dig-filename (quot value 10) part ind1 ind2 "_1of2"))
+                                 (u/save right (dig-filename (mod value 10) part ind1 ind2 "_2of2"))))))))]
     (process-part :left)
     (process-part :up)))
 
@@ -61,7 +64,6 @@
    (doseq [ind (range 4 10)]
      (println ind)
      (extract-digit-images (str "nono" ind)))
-   (extract-digit-images "nono4")
 
    (->> (io/file "train-set")
         (file-seq)

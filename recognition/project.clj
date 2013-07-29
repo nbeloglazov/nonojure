@@ -4,7 +4,9 @@
                  [clj-kdtree "1.1.0"
                   :exclusions [[org.clojure/clojure]]]
                  [org.opencv/opencv "2.4.6"]
-                 [hu.kazocsaba/image-viewer "1.2.3"]]
+                 [hu.kazocsaba/image-viewer "1.2.3"]
+                 [org.encog/encog-core "3.1.0"]
+                 [enclog "0.6.3"]]
   :resource-paths ["resources"]
   :jvm-opts ["-Djava.library.path=resources/native/"]
   :plugins [[lein-localrepo "0.5.2"]])

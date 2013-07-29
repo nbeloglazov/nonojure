@@ -1,5 +1,5 @@
 (ns recognition.core
-  (:import [org.opencv.core Core Mat]
+  (:import [org.opencv.core Core Mat Scalar]
            org.opencv.imgproc.Imgproc
            org.opencv.utils.Converters)
   (:require [recognition
@@ -253,18 +253,29 @@
    (defn ddef [im]
      (def orig (.clone im))
      im)
-   (->> "nono7.jpg"
+   (->> "nono5.jpg"
       u/read
       fit-to-1000!
       adaptive-threshold!
       ddef
-;      u/show
+      u/show
       u/invert!
       mor/skeleton
       remove-noise
       u/invert!
       u/show
       (def im))
+
+   (let [l (java.util.ArrayList.)
+         m (Mat.)
+         cloned (u/invert! (u/clone orig))
+         _ (Imgproc/findContours cloned l m Imgproc/RETR_LIST Imgproc/CHAIN_APPROX_SIMPLE)
+         l (filter #(< 10 (Imgproc/contourArea %) 100) l)
+         whi (white cloned)]
+     (Imgproc/drawContours whi l -1 (Scalar. 0.0))
+     (u/show whi)
+;     (icore/view (icharts/histogram (map #(Imgproc/contourArea %) l) :nbins 100))
+     (count l))
 
    (u/show orig)
 
