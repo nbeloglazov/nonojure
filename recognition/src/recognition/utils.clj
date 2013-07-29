@@ -55,10 +55,13 @@
     (for [j (range (.cols mat))]
       (-> (.get mat i j) seq first))))
 
-(defn read [file]
-  (let [m (Highgui/imread (str "resources/examples/" file))]
+(defn read
+  ([file prefix]
+     (let [m (Highgui/imread (str prefix file))]
     (Imgproc/cvtColor m m Imgproc/COLOR_RGB2GRAY)
     m))
+  ([file]
+     (read file "resources/examples/")))
 
 (defn save [mat file]
   (Highgui/imwrite file mat))
