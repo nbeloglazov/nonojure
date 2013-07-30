@@ -28,10 +28,8 @@
       (println "\nNeural Network Results:")
       net)))
 
-(xor false)
-
-(defn input [name]
-  (let [m (u/read (str "train-set/" name) "")]
+(defn input [dir name]
+  (let [m (u/read (str dir "/" name) "")]
     (.convertTo m m CvType/CV_32F (/ 1.0 255))
     (-> (.reshape m 1 1)
         (MatOfFloat.)
@@ -40,12 +38,12 @@
 (defn output [name]
   (assoc [0 0 0 0 0 0 0 0 0 0] (- (int (first name)) (int \0)) 1))
 
-(defn train-dataset []
-  (->> (io/file "train-set")
+(defn read-dataset [dir]
+  (->> (io/file dir)
        (file-seq)
        (filter #(.isFile %))
        (map #(.getName %))
-       (map #(vector (input %) (output %)))
+       (map #(vector (input dir %) (output %)))
        (apply map vector)
        (apply tr/data :basic-dataset)))
 
@@ -57,19 +55,33 @@
               :output  10
               :hidden [700]))
 
-(def file "1.nono4_up_2_0.png")
+(def dataset (read-dataset "train-set"))
 
-(def dataset (train-dataset))
+(def test (read-dataset "test-set"))
 
 (def trainer (tr/trainer :resilient-prop :network net :training-set dataset))
 
-(def test (tr/data :basic (input file)))
+#_(
 
-#_(tr/train trainer 0.00000001 1000 [])
+   (tr/train trainer 0.001 1000 [])
 
-#_(ut/eg-persist net "network.eg")
+   (ut/eg-persist net "network.eg")
 
-#_(seq (.getData (.compute net test)))
+   (seq (.getData (.compute net test)))
 
+   (def ex (.getInput (first (.getData test))))
 
+   (seq (.getData (.compute net ex)))
 
+   (doseq [pair (.getData test)
+           :let [input (.getInput pair)
+                 ideal (.getIdealArray pair)]]
+     (->> (.compute net input)
+          (.getData)
+          seq
+          (map - (seq ideal))
+          (map #(Math/abs %))
+          (reduce +)
+          println))
+
+   )
