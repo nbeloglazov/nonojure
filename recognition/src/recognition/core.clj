@@ -253,7 +253,7 @@
    (defn ddef [im]
      (def orig (.clone im))
      im)
-   (->> "nono5.jpg"
+   (->> "nono4.jpg"
       u/read
       fit-to-1000!
       adaptive-threshold!
