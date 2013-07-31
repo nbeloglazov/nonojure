@@ -57,9 +57,7 @@
 
 (defn read
   ([file prefix]
-     (let [m (Highgui/imread (str prefix file))]
-    (Imgproc/cvtColor m m Imgproc/COLOR_RGB2GRAY)
-    m))
+     (Highgui/imread (str prefix file) Highgui/CV_LOAD_IMAGE_GRAYSCALE))
   ([file]
      (read file "resources/examples/")))
 
