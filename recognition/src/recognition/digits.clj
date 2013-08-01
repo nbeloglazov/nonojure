@@ -9,35 +9,89 @@
              [util :as en-ut]]
             [clojure.java.io :as io]
             [clojure.edn :as edn])
-  (:import [org.opencv.core Core Mat CvType Scalar MatOfFloat]))
+  (:import [org.opencv.core Core Mat CvType Scalar MatOfFloat Size]
+           org.opencv.imgproc.Imgproc))
 
 (def size 30)
 
 (def center (quot size 2))
 
 (defn clear-borders! [digit]
-  (doseq [m (concat (map #(.row digit %) [0 1 2 (- size 2) (- size 1)])
+  (doseq [m (concat (map #(.row digit %) [0 1 (- size 2) (- size 1)])
                     (map #(.col digit %) [0 1 (- size 2) (- size 1)]))]
     (.setTo m (Scalar. 255.0)))
   digit)
+
+(defn rect-center [rect]
+  [(+ (.x rect) (/ (.width rect) 2))
+   (+ (.y rect) (/ (.height rect) 2))])
+
+(defn find-bad-contours [conts]
+  (letfn [(too-small? [rect]
+            (< (.height rect) (/ size 2)))
+          (too-close-to-borders? [rect]
+            (let [[x y] (rect-center rect)]
+              (or (< x (* size 1/5))
+                  (> x (* size 4/5)))))]
+    (filter #(let [rect (Imgproc/boundingRect %)]
+               (or (too-small? rect)
+                   (too-close-to-borders? rect)))
+            conts)))
+
+(defn remove-contours! [mat conts]
+  (Imgproc/drawContours mat conts -1 (Scalar. 255.0) -1)
+  mat)
+
+(defn top-contours [mat]
+  (let [l (java.util.ArrayList.)
+        m  (Mat.)
+        cl (u/invert! (u/clone mat))]
+    (Imgproc/findContours cl l m Imgproc/RETR_EXTERNAL Imgproc/CHAIN_APPROX_SIMPLE)
+    l))
+
+(defn center-digit [dig]
+  (let [[fst & rst] (top-contours dig)]
+    (if (nil? rst)
+      (let [[x y] (center (Imgproc/boundingRect fst))
+            transf-mat (-> (into-array Float/TYPE [1 0 (- center x) 0 1 (- center y)])
+                           (MatOfFloat.)
+                           (.reshape 1 2))
+            res (Mat.)]
+        (println transf-mat)
+        (Imgproc/warpAffine dig res transf-mat (Size. size size) Imgproc/INTER_NEAREST Imgproc/BORDER_CONSTANT (Scalar. 255.0))
+        res)
+      dig)))
+
+(defn clear-noise! [digit]
+  (let [digit (clear-borders! digit)
+        bad (find-bad-contours (top-contours digit))]
+    (remove-contours! digit bad)))
 
 (defn find-separator [digit]
   (let [weight (fn [n]
                  (-> (.col digit n) Core/sumElems .val (aget 0)))]
     (apply max-key (memoize weight) (range 5 (inc center)))))
 
-(defn separate [digit col]
-  (letfn [(subdigit [from to]
-            (let [res (Mat. size size CvType/CV_8UC1 (Scalar. 255.0))
-                  width (- to from)
-                  dst-from (- center (quot width 2))
-                  dst (.submat res 0 (dec size) dst-from (+ dst-from width))
-                  src (.submat digit 0 (dec size) from to)]
-              (.copyTo src dst)
-              res))]
-    [(subdigit 0 (dec col))
-     (subdigit (inc col) (dec size))]))
+(defn separate [digit]
+  (let [subdigit (fn [from to]
+                   (let [res (Mat. size size CvType/CV_8UC1 (Scalar. 255.0))
+                         width (- to from)
+                         dst-from (- center (quot width 2))
+                         dst (.submat res 0 (dec size) dst-from (+ dst-from width))
+                         src (.submat digit 0 (dec size) from to)]
+                     (.copyTo src dst)
+                     res))
+        conts (top-contours digit)]
+    (if (= (count conts) 1)
+     (let [col (find-separator digit)]
+       (map clear-noise! [(subdigit 0 (dec col))
+                          (subdigit (inc col) (dec size))]))
+     (->> (map #(Imgproc/boundingRect %) conts)
+          identity
+          (map #(subdigit (.x %) (+ (.x %) (.width %))))
+          (map clear-noise!)))))
 
+;(def d6 (clear-noise! (u/quad-to-rect c/orig (-> c/strut :left (nth 9) (nth 0)) [size size])))
 
 (def net (en-ut/eg-load "network.eg"))
 

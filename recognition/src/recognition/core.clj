@@ -264,7 +264,8 @@
       remove-noise
       u/invert!
       u/show
-      (def im))
+      parse-structure
+      (def strut))
 
    (let [l (java.util.ArrayList.)
          m (Mat.)

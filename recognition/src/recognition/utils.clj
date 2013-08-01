@@ -141,5 +141,5 @@
   (let [transf (perspective-transform quad
                                       [[0 0] [rect-width 0] [rect-width rect-height] [0 rect-height]])
         res (Mat. rect-height rect-width CvType/CV_8UC1)]
-    (Imgproc/warpPerspective mat res transf (Size. rect-width rect-height))
+    (Imgproc/warpPerspective mat res transf (Size. rect-width rect-height) Imgproc/INTER_NEAREST)
     res))
