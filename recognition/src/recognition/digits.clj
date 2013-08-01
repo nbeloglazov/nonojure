@@ -31,8 +31,9 @@
             (< (.height rect) (/ size 2)))
           (too-close-to-borders? [rect]
             (let [[x y] (rect-center rect)]
-              (or (< x (* size 1/5))
-                  (> x (* size 4/5)))))]
+              (and (or (< x (* size 1/7))
+                       (> x (* size 6/7)))
+                   (< (.width rect) 4))))]
     (filter #(let [rect (Imgproc/boundingRect %)]
                (or (too-small? rect)
                    (too-close-to-borders? rect)))
@@ -51,13 +52,12 @@
 
 (defn center-digit [dig]
   (let [[fst & rst] (top-contours dig)]
-    (if (nil? rst)
-      (let [[x y] (center (Imgproc/boundingRect fst))
+    (if (and (not (nil? fst)) (nil? rst))
+      (let [[x y] (rect-center (Imgproc/boundingRect fst))
             transf-mat (-> (into-array Float/TYPE [1 0 (- center x) 0 1 (- center y)])
                            (MatOfFloat.)
                            (.reshape 1 2))
             res (Mat.)]
-        (println transf-mat)
         (Imgproc/warpAffine dig res transf-mat (Size. size size) Imgproc/INTER_NEAREST Imgproc/BORDER_CONSTANT (Scalar. 255.0))
         res)
       dig)))
@@ -81,7 +81,7 @@
                          src (.submat digit 0 (dec size) from to)]
                      (.copyTo src dst)
                      res))
-        conts (top-contours digit)]
+        conts (sort-by #(first (rect-center (Imgproc/boundingRect %))) (top-contours digit))]
     (if (= (count conts) 1)
      (let [col (find-separator digit)]
        (map clear-noise! [(subdigit 0 (dec col))
@@ -115,9 +115,11 @@
         to-digit (fn [output]
                    (apply max-key second (map-indexed vector output)))
         single (recognize dig)
-        [dbl-l dbl-r] (->> (find-separator dig)
-                           (separate dig)
+        [dbl-l dbl-r] (->> (separate dig)
+                           (map center-digit)
+                           (map u/blur!)
                            (map recognize))]
+    (println dbl-l dbl-r)
     (if (> (score single)
            (* (score dbl-l)
               (score dbl-r)))
@@ -126,7 +128,7 @@
 
 (defn recognize-all-digits [mat nono]
   (letfn [(extract [positions]
-            (clear-borders! (u/quad-to-rect mat positions [size size])))
+            (u/blur! (center-digit (clear-noise! (u/quad-to-rect mat positions [size size])))))
           (recognize-row [row]
             (map #(recognize-digit (extract %)) row))
           (recognize-part [part]
@@ -143,6 +145,7 @@
         nono (c/parse-structure im)
         dig-filename (fn [value part ind1 ind2 other]
                        (format "test-set/%d.%s_%s_%d_%d%s.png" value name (clojure.core/name part) ind1 ind2 other))
+        prepare (comp u/blur! center-digit)
         process-part (fn [part]
                        (let [n-part (nono part)
                              rn-part (real-nono part)]
@@ -151,18 +154,21 @@
                                           (count (rn-part ind1)))
                                  ind2 (range (count (n-part ind1)))]
                            (let [value (get-in rn-part [ind1 ind2])
-                                 digit (clear-borders! (u/quad-to-rect orig (get-in n-part [ind1 ind2]) [size size]))]
+                                 digit (-> (u/quad-to-rect orig (get-in n-part [ind1 ind2]) [size size])
+                                           clear-noise!)]
                              (if (< value 10)
-                               (u/save digit (dig-filename value part ind1 ind2 ""))
-                               (let [[left right] (separate digit (find-separator digit))]
-                                 (u/save left (dig-filename (quot value 10) part ind1 ind2 "_1of2"))
-                                 (u/save right (dig-filename (mod value 10) part ind1 ind2 "_2of2"))))))))]
+                               (u/save (prepare digit) (dig-filename value part ind1 ind2 ""))
+                               (let [[left right] (map prepare (separate digit))]
+                                 (when (and (not= (* size size) (Core/countNonZero left))
+                                            (not= (* size size) (Core/countNonZero right)))
+                                  (u/save left (dig-filename (quot value 10) part ind1 ind2 "_1of2"))
+                                  (u/save right (dig-filename (mod value 10) part ind1 ind2 "_2of2")))))))))]
     (process-part :left)
     (process-part :up)))
 
+#_(u/show (clear-noise! (u/quad-to-rect c/orig (-> c/strut :left (nth 4) (nth 0)) [size size])))
 
-
-
+#_(u/show c/orig)
 
 ;;; Training neural network
 
@@ -186,11 +192,11 @@
 #_(
 
    (def net
-     (nnet/network (nnet/neural-pattern :feed-forward)
-                 :activation :sigmoid
-                 :input   900
-                 :output  10
-                 :hidden [700]))
+     (nnets/network (nnets/neural-pattern :feed-forward)
+                    :activation :sigmoid
+                    :input   900
+                    :output  10
+                    :hidden [700]))
 
    (def dataset (read-dataset "train-set"))
 
@@ -200,31 +206,33 @@
 
    (train/train trainer 0.001 1000 [])
 
-   (eg-ut/eg-persist net "network.eg")
+   (en-ut/eg-persist net "network.eg")
 
 
 
    (en-ut/eg-load "")
 
+   (extract-digit-images "nono4")
+
    (doseq [ind (range 4 10)]
      (println ind)
      (extract-digit-images (str "nono" ind)))
 
-   (->> (io/file "train-set")
+   (->> (io/file "test-set")
         (file-seq)
         (map #(.getName %))
         (map first)
         frequencies)
 
    (defn move-to-train [files]
-     (doseq [file (take 25 (shuffle files))]
+     (doseq [file (take 40 (shuffle files))]
        (.renameTo file (io/file (str "train-set/" (.getName file))))))
 
    (->> (io/file "test-set")
         (file-seq)
         (group-by #(first (.getName %)))
         (filter (fn [[k v]]
-                  (<= (int \1) (int k) (int \9))))
+                  (<= (int \0) (int k) (int \9))))
         (map second)
         (map move-to-train)
         (dorun))
@@ -252,11 +260,20 @@
        (doseq [v row]
          (print " " (apply str (map first v))))))
 
-   (def d6 (clear-borders! (u/quad-to-rect c/orig (-> c/strut :left (nth 0) first) [size size])))
+   (defn digit [type row ind]
+     (-> (u/quad-to-rect c/orig (-> c/strut type (nth row) (nth ind)) [size size])
+         clear-noise!
+         center-digit
+         u/blur!))
+
+   (def d6 (digit :left 0 0))
 
    (def d14 (clear-borders! (u/quad-to-rect c/orig (-> c/strut :left (nth 5) first) [size size])))
 
    (def d11 (clear-borders! (u/quad-to-rect c/orig (-> c/strut :left (nth 6) first) [size size])))
+
+
+   (recognize-digit (u/show (digit :up 0 0)))
 
 
 

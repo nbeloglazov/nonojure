@@ -101,6 +101,10 @@
   (Core/bitwise_or src1 src2 dst)
   dst)
 
+(defn blur! [mat]
+  (Imgproc/GaussianBlur mat mat (Size. 3 3) 0 0)
+  mat)
+
 (defn put-text! [mat text [x y]]
   (Core/putText mat text (Point. x y) Core/FONT_HERSHEY_SIMPLEX 0.25 (Scalar. 0.0))
   mat)

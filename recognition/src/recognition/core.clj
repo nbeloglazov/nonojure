@@ -250,22 +250,39 @@
         )
 
 
-   (defn ddef [im]
-     (def orig (.clone im))
-     im)
-   (->> "nono4.jpg"
-      u/read
-      fit-to-1000!
-      adaptive-threshold!
-      ddef
-      u/show
-      u/invert!
-      mor/skeleton
-      remove-noise
-      u/invert!
-      u/show
-      parse-structure
-      (def strut))
+   (do
+    (defn ddef [im]
+      (def orig (.clone im))
+      im)
+
+    (let [orig (->> "nono5.jpg"
+                    u/read
+                    fit-to-1000!
+                    adaptive-threshold!)
+          skelet (->> orig
+                      u/clone
+                      u/invert!
+                      mor/skeleton
+                      remove-noise
+                      u/invert!)]
+      (def orig orig)
+      (u/show orig)
+      (def skelet skelet)
+      (def strut (parse-structure skelet))))
+
+
+   (let [lines (Mat.)
+         wh (white orig)]
+     (Imgproc/HoughLinesP (u/invert! (u/clone skelet)) lines 1 (/ Math/PI 180) 100)
+     (doseq [i (range (.cols lines))]
+       (let [[x0 y0 x1 y1] (seq (.get lines 0 i))]
+         (u/draw-line! wh [x0 y0] [x1 y1])))
+     (u/show wh))
+
+   (let [cl (u/clone orig)]
+     (Imgproc/Canny cl cl 100.0 300.0)
+     (u/show cl))
+
 
    (let [l (java.util.ArrayList.)
          m (Mat.)
