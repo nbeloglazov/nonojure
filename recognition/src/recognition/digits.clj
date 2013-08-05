@@ -2,7 +2,8 @@
   (:require [recognition
              [core :as c]
              [utils :as u]
-             [morphology :as mor]]
+             [morphology :as mor]
+             [trace :refer [with-scope]]]
             [enclog
              [nnets :as nnets]
              [training :as train]
@@ -119,7 +120,6 @@
                            (map center-digit)
                            (map u/blur!)
                            (map recognize))]
-    (println dbl-l dbl-r)
     (if (> (score single)
            (* (score dbl-l)
               (score dbl-r)))
@@ -127,13 +127,16 @@
       (map to-digit [dbl-l dbl-r]))))
 
 (defn recognize-all-digits [mat nono]
-  (letfn [(extract [positions]
-            (u/blur! (center-digit (clear-noise! (u/quad-to-rect mat positions [size size])))))
-          (recognize-row [row]
-            (map #(recognize-digit (extract %)) row))
-          (recognize-part [part]
-            (map recognize-row part))]
-    (reduce #(update-in %1 [%2] recognize-part) nono [:left :up])))
+  (with-scope :recognize-digits
+    (letfn [(extract [positions]
+              (u/blur! (center-digit (clear-noise! (u/quad-to-rect mat positions [size size])))))
+            (recognize-row [row]
+              (map #(recognize-digit (extract %)) row))
+            (recognize-part [part]
+              (map recognize-row part))]
+      (reduce #(with-scope (keyword (str "recognize-" (name %2) "-part"))
+                 (update-in %1 [%2] recognize-part))
+              nono [:left :up]))))
 
 
 ;;; Creating train set
@@ -215,7 +218,7 @@
    (extract-digit-images "nono4")
 
    (doseq [ind (range 4 10)]
-     (println ind)
+     ;(println ind)
      (extract-digit-images (str "nono" ind)))
 
    (->> (io/file "test-set")

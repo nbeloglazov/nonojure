@@ -1,7 +1,9 @@
 (ns recognition.morphology
   (:import org.opencv.imgproc.Imgproc
            [org.opencv.core Mat Size CvType Scalar Core])
-  (:require [recognition.utils :as u]))
+  (:require [recognition
+             [utils :as u]
+             [trace :refer [with-scope]]]))
 
 (recognition.Loader/loadLibrary "opencv_java246")
 
@@ -87,13 +89,14 @@
               [-1 -1  0]]])))
 
 (defn skeleton [mat]
-  (let [iteration (fn [mat]
-                  (reduce thinning mat skeleton-patterns))]
-   (loop [cur (iteration mat)
-          prev (u/clone mat)
-          it 0]
-     (if (u/zero-mat? (u/subtract prev cur prev))
-       cur
-       (recur (iteration cur)
-              cur
-              (inc it))))))
+  (with-scope :skelotization
+    (let [iteration (fn [mat]
+                      (reduce thinning mat skeleton-patterns))]
+      (loop [cur (iteration mat)
+             prev (u/clone mat)
+             it 0]
+        (if (u/zero-mat? (u/subtract prev cur prev))
+          cur
+          (recur (iteration cur)
+                 cur
+                 (inc it)))))))
