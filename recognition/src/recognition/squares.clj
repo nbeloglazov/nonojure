@@ -1,6 +1,7 @@
 (ns recognition.squares
   (:require [recognition
-             [utils :as u]]
+             [utils :as u]
+             [trace :refer [with-scope]]]
             [kdtree :as kd]
             [incanter
              [core :as core]
@@ -16,7 +17,7 @@
           (<= (* pi4 -3) angle (- pi4)) :up
           (or (<= (* 3 pi4) angle (+ Math/PI 0.001))
               (<= (- (- Math/PI) -0.001) angle (* pi4 -3))) :left
-          :else (throw (IllegalArgumentException. (str angle))))))
+              :else (throw (IllegalArgumentException. (str angle))))))
 
 (defn neib-4 [tree point]
   (rest (kd/nearest-neighbor tree point 5)))
@@ -53,10 +54,12 @@
                [point nbs]))))
 
 (defn neibs-all-and-filter [points]
-  (let [nbs (neibs-all points)]
-    (if (= (count nbs) (count points))
-      nbs
-      (recur (keys nbs)))))
+  (with-scope :build-neighbourhood
+    (loop [points points]
+      (let [nbs (neibs-all points)]
+        (if (= (count nbs) (count points))
+          nbs
+          (recur (keys nbs)))))))
 
 (defn move [dir pos]
   (map + pos
@@ -99,15 +102,17 @@
       (conj (find-all-components left) comp))))
 
 (defn normalize-component [positions]
-  (let [min-pos (->> (keys positions)
-                     (reduce #(doall (map min %1 %2))))]
-    (into {} (for [[pos point] positions]
-               [(map - pos min-pos) point]))))
+  (with-scope :normalize
+    (let [min-pos (->> (keys positions)
+                       (reduce #(doall (map min %1 %2))))]
+      (into {} (for [[pos point] positions]
+                 [(map - pos min-pos) point])))))
 
 (defn find-largest-component [neibs]
-  (->> (find-all-components neibs)
-       (sort-by count)
-       last))
+  (with-scope :find-largest-component
+    (->> (find-all-components neibs)
+         (sort-by count)
+         last)))
 
 (defn missing-neibs [positions neibs]
   (letfn [(neib-pos [point dir]
@@ -147,15 +152,18 @@
     (merge ms (reduce add-new neibs ms))))
 
 (defn find-and-add-missing [neibs positions]
-  (let [neibs (select-keys neibs (keys positions))
-        missing (missing-neibs positions neibs)]
-    (if (empty? missing)
-      [neibs positions]
-      (let [missing-pos (calc-real-positions missing)
-            new-neibs (merge-neibs-with-missing neibs missing missing-pos)
-            new-positions (merge positions
-                                 (clojure.set/map-invert missing-pos))]
-        (recur new-neibs new-positions)))))
+  (with-scope :restore-missing-points
+    (loop [neibs neibs
+           positions positions]
+      (let [neibs (select-keys neibs (keys positions))
+            missing (missing-neibs positions neibs)]
+        (if (empty? missing)
+          [neibs positions]
+          (let [missing-pos (calc-real-positions missing)
+                new-neibs (merge-neibs-with-missing neibs missing missing-pos)
+                new-positions (merge positions
+                                     (clojure.set/map-invert missing-pos))]
+            (recur new-neibs new-positions)))))))
 
 (defn find-boundaries [positions]
   (let [positions (set positions)
@@ -189,26 +197,28 @@
             [(move dir pos) new-neib])
           (into coord-by-pos)))
   ([coord-by-pos]
-     (let [{:keys [left right up down]} (find-boundaries (keys coord-by-pos))]
-       (reduce #(apply add-borders %1 %2) coord-by-pos
-               [[:left #(= left (first %))]
-                [:right #(= right (first %))]
-                [:up #(= up (second %))]
-                [:down #(= down (second %))]]))))
+     (with-scope :add-border-points
+       (let [{:keys [left right up down]} (find-boundaries (keys coord-by-pos))]
+         (reduce #(apply add-borders %1 %2) coord-by-pos
+                 [[:left #(= left (first %))]
+                  [:right #(= right (first %))]
+                  [:up #(= up (second %))]
+                  [:down #(= down (second %))]])))))
 
 (defn build-squares [coord-by-pos]
-  (letfn [(build [pos]
-            (let [square (map coord-by-pos [pos
-                                            (move :right pos)
-                                            (move :down (move :right pos))
-                                            (move :down pos)])]
-              (if (some nil? square)
-                nil
-                square)))]
-    (into {} (for [pos (keys coord-by-pos)
-                   :let [sq (build pos)]
-                   :when sq]
-               [pos sq]))))
+  (with-scope :build-squares
+    (letfn [(build [pos]
+              (let [square (map coord-by-pos [pos
+                                              (move :right pos)
+                                              (move :down (move :right pos))
+                                              (move :down pos)])]
+                (if (some nil? square)
+                  nil
+                  square)))]
+      (into {} (for [pos (keys coord-by-pos)
+                     :let [sq (build pos)]
+                     :when sq]
+                 [pos sq])))))
 
 #_(
 
@@ -274,18 +284,18 @@
    (take 10 cmp)
    )
 
-;(find-component nbs)
+                                        ;(find-component nbs)
 
-;(draw-blobs orig (take 1 bls))
-;(draw-blobs orig bls)
+                                        ;(draw-blobs orig (take 1 bls))
+                                        ;(draw-blobs orig bls)
 
 #_(-> (kd/build-tree points)
-    (kd/nearest-neighbor [0 0] 10000)
-    (->> (map meta)))
+      (kd/nearest-neighbor [0 0] 10000)
+      (->> (map meta)))
 
 #_(-> (for [i (range 5)]
-      (with-meta [i i] {:value i}))
-    (kd/build-tree)
-    (kd/delete [0 0])
-    (kd/nearest-neighbor [0 0] 4)
-    (->> (map meta)))
+        (with-meta [i i] {:value i}))
+      (kd/build-tree)
+      (kd/delete [0 0])
+      (kd/nearest-neighbor [0 0] 4)
+      (->> (map meta)))
