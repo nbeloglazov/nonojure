@@ -89,7 +89,7 @@
               [-1 -1  0]]])))
 
 (defn skeleton [mat]
-  (with-scope :skelotization
+  (with-scope :skeletonization
     (let [iteration (fn [mat]
                       (reduce thinning mat skeleton-patterns))]
       (loop [cur (iteration mat)

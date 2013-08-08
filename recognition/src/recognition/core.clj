@@ -6,6 +6,7 @@
              [utils :as u]
              [morphology :as mor]
              [squares :as sq]
+             [digits :as dg]
              [trace :refer [with-scope]
                     :as trace]]
             [incanter
@@ -243,6 +244,23 @@
   (letfn [(sum [part]
             (apply + (flatten (part nono))))]
     (- (sum :left) (sum :up))))
+
+(defn recognize [file]
+  (let [orig (-> file
+                 (u/read "")
+                 fit-to-1000!
+                 adaptive-threshold!)
+        skelet (->> orig
+                    u/clone
+                    u/invert!
+                    mor/skeleton
+                    remove-noise
+                    u/invert!)
+        strut (parse-structure skelet)
+        nono (dg/recognize-all-digits orig strut)]
+    {:structure strut
+     :digits nono
+     :thresholded orig}))
 
 #_(
 

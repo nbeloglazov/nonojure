@@ -1,6 +1,5 @@
 (ns recognition.digits
   (:require [recognition
-             [core :as c]
              [utils :as u]
              [morphology :as mor]
              [trace :refer [with-scope]]]
@@ -141,7 +140,7 @@
 
 ;;; Creating train set
 
-(defn extract-digit-images [name]
+#_(defn extract-digit-images [name]
   (let [orig (->> (str name ".jpg") u/read c/fit-to-1000! c/adaptive-threshold!)
         im (->> (.clone orig) u/invert! mor/skeleton c/remove-noise u/invert!)
         real-nono (->> (str "parsed/" name ".clj") io/resource slurp edn/read-string)

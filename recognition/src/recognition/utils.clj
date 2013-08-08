@@ -8,14 +8,15 @@
 
 (clojure.lang.RT/loadLibrary "opencv_java246")
 
+(defn to-image [mat]
+  (let [bytes (MatOfByte.)]
+    (Highgui/imencode ".png" mat bytes)
+    (-> (.toArray bytes)
+        (java.io.ByteArrayInputStream.)
+        (ImageIO/read))))
+
 (defn show [mat]
-  (letfn [(to-image [mat]
-            (let [bytes (MatOfByte.)]
-              (Highgui/imencode ".png" mat bytes)
-              (-> (.toArray bytes)
-                  (java.io.ByteArrayInputStream.)
-                  (ImageIO/read))))
-          (adapt-size [frame mat]
+  (letfn [(adapt-size [frame mat]
             (let [w (.width mat)
                   h (.height mat)
                   [s-w s-h] (->> (java.awt.Toolkit/getDefaultToolkit)
