@@ -14,7 +14,8 @@
             [recognition
              [core :as core]
              [trace :as trace]
-             [utils :as utils]])
+             [utils :as utils]
+             [digits :as digits]])
   (:import [javax.swing.tree DefaultTreeCellRenderer DefaultTreeModel DefaultMutableTreeNode]
            [java.awt.image BufferedImage]))
 
@@ -30,6 +31,7 @@
 (def recognized-image (atom nil))
 (def solution (atom nil))
 (def running-task (atom nil))
+(def selected (atom nil))
 
 (declare frame)
 
@@ -95,6 +97,13 @@
                              (/ (.getHeight comp)
                                 (.getHeight image))))]
      (.drawImage gr image 0 0 (* scale (.getWidth image)) (* scale (.getHeight image)) nil))))
+
+(defn draw-selected-digit [comp gr]
+  (when-let [solution @solution]
+    (when-let [selected @selected]
+      (let [im ((:digit-image-fn solution) (:rect selected))
+            [x y] (map - (:mouse selected) [(.getWidth im) (.getHeight im)])]
+        (.drawImage gr im (max x 0) (max y 0) nil)))))
 
 (defn trace-handler [tree]
   (let [model (sc/config tree :model)
@@ -188,7 +197,7 @@
 
 ;(keys tst)
 
-(defn assoc-sizes [solution]
+(defn add-sizes [solution]
   (let [{:keys [left up]} (:digits solution)
         [f-w f-h] (map count [up left])
         [d-w d-h] (map #(->> %
@@ -199,6 +208,13 @@
       :field-size [f-w f-h]
       :digits-size [d-w d-h])))
 
+(defn add-digit-image-fn [solution]
+  (assoc solution :digit-image-fn
+         (memoize (fn [rect]
+                    (-> (:thresholded solution)
+                        (utils/quad-to-rect rect [digits/size digits/size])
+                        (utils/to-image))))))
+
 (defn update-table [solution]
   (sc/config! (sc/select frame [:#solution]) :model (to-table-model solution)))
 
@@ -207,7 +223,8 @@
   (when-let [file @image-file]
     (let [sol (-> (trace/with-handler (trace-handler tree)
                     (core/recognize file))
-                  (assoc-sizes))
+                  add-sizes
+                  add-digit-image-fn)
           model (sc/config tree :model)
           root (.getRoot model)]
       (reset! solution sol)
@@ -218,7 +235,6 @@
        (reset! recognized-image (draw-solution sol))
        (update-table sol)
        (revalidate frame)))))
-
 
 (defn start-stop [_]
   (let [button (sc/select frame [:#start-stop])]
@@ -237,6 +253,36 @@
         (sc/config! button :text "Abort")
         (.start @running-task)))))
 
+(defn show-tooltip [event]
+  (when-let [solution @solution]
+    (let [[f-w f-h] (:field-size solution)
+          [d-w d-h] (:digits-size solution)
+          source (.getSource event)
+          scale (->> (map + [f-w f-h] [d-w d-h])
+                     (map #(* % sq-size))
+                     (map / [(.getWidth source) (.getHeight source)])
+                     (apply min))
+          [x y] (->> [(.getX event) (.getY event)]
+                     (map #(/ % scale))
+                     (map int)
+                     (map #(quot % sq-size)))
+          rect (cond (and (< x d-w)
+                          (< (dec d-h) y (+ d-h f-h)))
+                     (let [row (-> solution :structure :left (nth (- y d-h)))]
+                       (nth row (- x (- d-w (count row))) nil))
+                     (and (< y d-h)
+                          (< (dec d-w) x (+ d-w f-w)))
+                     (let [column (-> solution :structure :up (nth (- x d-w)))]
+                       (nth column (- y (- d-h (count column))) nil))
+                     :default nil)]
+      (if-not (nil? rect)
+        (reset! selected {:rect rect
+                          :mouse [(.getX event) (.getY event)]})
+        (reset! selected nil))
+      (doto source
+          (.revalidate)
+          (.repaint)))))
+
 (defn get-layout []
   (mig/mig-panel :constraints ["" "[grow, align center][250!, align center][grow, align center]" "[50!][grow]"]
                  :items [[(sc/button :text "Load"
@@ -246,8 +292,13 @@
                                      :listen [:action start-stop]) "wrap"]
                          [(sc/border-panel :paint (fn [comp gr] (draw-image comp gr @image))) "grow"]
                          [tree "grow"]
-                         [(sc/border-panel :paint (fn [comp gr] (draw-image comp gr @recognized-image)))
+                         [(sc/border-panel :paint (fn [comp gr]
+                                                    (draw-image comp gr @recognized-image)
+                                                    (draw-selected-digit comp gr))
+                                           :listen [:mouse-motion #'show-tooltip])
                           #_(sc/table :id :solution) "grow"]]))
+
+
 
 (def frame (doto (sc/frame :title "Nonogram recognizer"
                            :content (get-layout)
