@@ -55,7 +55,6 @@
       (with-scope :build
         (loop [points points
                tree tree]
-          (println "Do it!")
           (let [neibs (neibs-map tree points)
                 {good true bad false} (group-by good-point? neibs)]
             (if (empty? bad)

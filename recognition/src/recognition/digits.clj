@@ -50,6 +50,11 @@
     (Imgproc/findContours cl l m Imgproc/RETR_EXTERNAL Imgproc/CHAIN_APPROX_SIMPLE)
     l))
 
+(defn largest-contour [mat]
+  (->> (top-contours mat)
+       (sort-by #(- (Imgproc/contourArea %)))
+       first))
+
 (defn center-digit [dig]
   (let [[fst & rst] (top-contours dig)]
     (if (and (not (nil? fst)) (nil? rst))
@@ -70,28 +75,54 @@
 (defn find-separator [digit]
   (let [weight (fn [n]
                  (-> (.col digit n) Core/sumElems .val (aget 0)))]
-    (apply max-key (memoize weight) (range 5 (inc center)))))
+    (apply max-key (memoize weight) (range (quot size 3) (* 2 (quot size 3))))))
 
-(defn separate [digit]
-  (let [subdigit (fn [from to]
-                   (let [res (Mat. size size CvType/CV_8UC1 (Scalar. 255.0))
-                         width (- to from)
-                         dst-from (- center (quot width 2))
-                         dst (.submat res 0 (dec size) dst-from (+ dst-from width))
-                         src (.submat digit 0 (dec size) from to)]
-                     (.copyTo src dst)
-                     res))
-        conts (sort-by #(first (rect-center (Imgproc/boundingRect %))) (top-contours digit))]
-    (if (= (count conts) 1)
-     (let [col (find-separator digit)]
-       (map clear-noise! [(subdigit 0 (dec col))
-                          (subdigit (inc col) (dec size))]))
-     (->> (map #(Imgproc/boundingRect %) conts)
-          identity
-          (map #(subdigit (.x %) (+ (.x %) (.width %))))
-          (map clear-noise!)))))
+(defn submat [digit from to]
+  (let [res (Mat. size size CvType/CV_8UC1 (Scalar. 255.0))
+        width (- to from)
+        dst-from (- center (quot width 2))
+        dst (.submat res 0 (dec size) dst-from (+ dst-from width))
+        src (.submat digit 0 (dec size) from to)]
+    (.copyTo src dst)
+    res))
 
-;(def d6 (clear-noise! (u/quad-to-rect c/orig (-> c/strut :left (nth 9) (nth 0)) [size size])))
+(defn parse-as-1-digit [digit]
+  (let [res (->> digit
+                 u/clone
+                 center-digit
+                 u/blur!
+                 mat-to-array
+                 (train/data :basic)
+                 (.compute net)
+                 .getData
+                 seq)]
+    [(apply max-key second (map-indexed vector res))]))
+
+(defn parse-as-2-contours [digit]
+  (let [conts (->> (top-contours digit)
+                   (sort-by #(first (rect-center (Imgproc/boundingRect %)))))]
+    (when (= (count conts) 2)
+      (let [[l r] (->> (map #(Imgproc/boundingRect %) conts)
+                       (map #(submat digit (.x %) (+ (.x %) (.width %))))
+                       (map clear-noise!)
+                       (map parse-as-1-digit)
+                       (map first))]
+        (when (> (* (last l) (last r)) 0.5)
+          [l r])))))
+
+(defn parse-as-2-digits-merged-in-1-contour [digit]
+  (let [rect (Imgproc/boundingRect (largest-contour digit))
+        ratio (/ (.width rect) (.height rect))]
+    (when (>= ratio 9/10)
+      (let [digit (submat digit (.x rect) (+ (.x rect) (.width rect)))
+            col (find-separator digit)
+            [l r] (->> [[0 (dec col)] [(inc col) (dec size)]]
+                       (map #(apply submat digit %))
+                       (map clear-noise!)
+                       (map parse-as-1-digit)
+                       (map first))]
+        (when (> (* (last l) (last r)) 0.5)
+          [l r])))))
 
 (def net (en-ut/eg-load "network.eg"))
 
@@ -102,33 +133,18 @@
       (MatOfFloat.)
       (.toList))))
 
-(defn recognize-digit [dig]
-  (let [score (fn [output]
-                (let [mx (apply max output)]
-                  (- (+ mx mx) (apply + output))))
-        recognize (fn [dig]
-                    (->> (mat-to-array dig)
-                    (train/data :basic)
-                    (.compute net)
-                    .getData
-                    seq))
-        to-digit (fn [output]
-                   (apply max-key second (map-indexed vector output)))
-        single (recognize dig)
-        [dbl-l dbl-r] (->> (separate dig)
-                           (map center-digit)
-                           (map u/blur!)
-                           (map recognize))]
-    (if (> (score single)
-           (* (score dbl-l)
-              (score dbl-r)))
-      [(to-digit single)]
-      (map to-digit [dbl-l dbl-r]))))
+(defn recognize-digit [digit]
+  (->> [parse-as-2-contours
+        parse-as-2-digits-merged-in-1-contour
+        parse-as-1-digit]
+       (map #(% digit))
+       (remove nil?)
+       first))
 
 (defn recognize-all-digits [mat nono]
   (with-scope :recognize-digits
     (letfn [(extract [positions]
-              (u/blur! (center-digit (clear-noise! (u/quad-to-rect mat positions [size size])))))
+              (center-digit (clear-noise! (u/quad-to-rect mat positions [size size]))))
             (recognize-row [row]
               (map #(recognize-digit (extract %)) row))
             (recognize-part [part]
