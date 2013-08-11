@@ -33,33 +33,35 @@
          (stats/mean))))
 
 (defn neibs [tree point expected-dist]
-  (let [real-neib? (fn [{got-dist :dist-squared}]
-                     (<= (* 0.8 expected-dist) got-dist (* 1.2 expected-dist)))
-        dir-entry (fn [{neib :point :as res}]
-                    [(direction point neib)
-                     (mapv int neib)])]
-    (->> (kd/nearest-neighbor tree point 5)
-         (rest)
+  (letfn [(real-neib? [neib]
+            (<= (* 0.8 expected-dist) (:dist-squared neib) (* 1.2 expected-dist)))
+          (dir-entry [neib]
+            (let [neib (:point neib)]
+              [(direction point neib) (mapv int neib)]))]
+    (->> (neib-4 tree point)
          (filter real-neib?)
          (map dir-entry)
          (into {}))))
 
-
-(defn neibs-all [points]
-  (let [tree (kd/build-tree points)
-        average-dist (average-dist tree points)]
-    (into {} (for [point points
-                   :let [nbs (neibs tree point average-dist)]
-                   :when (> (count nbs) 1)]
-               [point nbs]))))
-
-(defn neibs-all-and-filter [points]
+(defn build-points-neighbourhood [points]
   (with-scope :build-neighbourhood
-    (loop [points points]
-      (let [nbs (neibs-all points)]
-        (if (= (count nbs) (count points))
-          nbs
-          (recur (keys nbs)))))))
+    (let [tree (with-scope :build-kd-tree (kd/build-tree points))
+          average-dist (with-scope :calculate-average-dist (average-dist tree points))
+          neibs-map (fn [tree points]
+                      (for [point points]
+                        [point (neibs tree point average-dist)]))
+          good-point? (fn [[point neibs]]
+                        (> (count neibs) 1))]
+      (with-scope :build
+        (loop [points points
+               tree tree]
+          (println "Do it!")
+          (let [neibs (neibs-map tree points)
+                {good true bad false} (group-by good-point? neibs)]
+            (if (empty? bad)
+              (into {} good)
+              (recur (map first good)
+                     (reduce kd/delete tree (map first bad))))))))))
 
 (defn move [dir pos]
   (map + pos

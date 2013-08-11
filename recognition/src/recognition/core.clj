@@ -205,6 +205,11 @@
 (defn white [mat]
   (u/invert! (Mat/zeros (.rows mat) (.cols mat) (.type mat))))
 
+(defn show-points [mat points]
+  (let [cl (white mat)]
+    (draw! cl :circle points)
+    (u/show cl)))
+
 
 (defn parse-structure [mat]
   (with-scope :restore-grid
@@ -213,12 +218,10 @@
                              find-intersections
                              u/invert!
                              black-pixels)
-          nbs (sq/neibs-all-and-filter intersections)
+;          _ (show-points mat intersections)
+          nbs (sq/build-points-neighbourhood intersections)
           pos (sq/find-largest-component nbs)
-          _ (let [cl (white mat)]
-              (draw! cl :circle (keys pos))
-                                        ;(u/show cl)
-              )
+          _ (show-points mat (keys pos))
           [nbs pos] (sq/find-and-add-missing nbs pos)
           _ (let [cl (white mat)]
               (draw! cl :circle (keys pos))
@@ -239,6 +242,9 @@
           nono (get-squares-with-digits mat squares field)
           size (map - (second field) (first field) [-1 -1])]
       (assoc nono :size size))))
+
+(trace/with-handler (trace/nesting-time-logger)
+     (parse-structure skelet))
 
 (defn valid-nono? [nono]
   (letfn [(sum [part]
@@ -282,7 +288,6 @@
       (def orig (.clone im))
       im)
 
-    ((nesting-logger) {:scope :123 :type :end})
 
     (trace/with-handler (trace/nesting-time-logger)
       (let [orig (->> "nono5.jpg"
@@ -299,6 +304,13 @@
        (u/show orig)
        (def skelet skelet)
        (def strut (parse-structure skelet)))))
+
+   (trace/with-handler (trace/nesting-time-logger)
+     (parse-structure skelet))
+
+
+
+   (u/show skelet)
 
    (trace/with-handler (trace/nesting-time-logger)
      (recognition.digits/recognize-all-digits orig strut))

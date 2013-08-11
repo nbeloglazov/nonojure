@@ -131,6 +131,18 @@
        last
        first))
 
+(defn has-line? [mat [x0 y0] [x1 y1]]
+  (let [has-line-part? (fn [x y]
+                         (not (zero-mat? (.submat mat (dec y) (inc y) (dec x) (inc x)))))
+        samples-num 3
+        samples (fn [start end]
+                  (let [step (/ (- end start) (inc samples-num))]
+                    (->> (iterate #(+ % step) start)
+                         rest
+                         (take samples-num)
+                         (map int))))]
+    (majority (map has-line-part? (samples x0 x1) (samples y0 y1)))))
+
 (defn mat-of-points [points]
   (let [m (MatOfPoint2f.)
         point (fn [[x y]] (Point. x y))]
