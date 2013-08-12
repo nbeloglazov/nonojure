@@ -33,10 +33,13 @@
             (let [[x y] (rect-center rect)]
               (and (or (< x (* size 1/7))
                        (> x (* size 6/7)))
-                   (< (.width rect) 4))))]
+                   (< (.width rect) 4))))
+          (too-wide? [rect]
+            (> (.width rect) (* size 3/4)))]
     (filter #(let [rect (Imgproc/boundingRect %)]
                (or (too-small? rect)
-                   (too-close-to-borders? rect)))
+                   (too-close-to-borders? rect)
+                   (too-wide? rect)))
             conts)))
 
 (defn remove-contours! [mat conts]
@@ -86,6 +89,15 @@
     (.copyTo src dst)
     res))
 
+(def net (en-ut/eg-load "network.eg"))
+
+(defn mat-to-array [mat]
+  (let [m (Mat.)]
+   (.convertTo mat m CvType/CV_32F (/ 1.0 255))
+   (-> (.reshape m 1 1)
+      (MatOfFloat.)
+      (.toList))))
+
 (defn parse-as-1-digit [digit]
   (let [res (->> digit
                  u/clone
@@ -123,15 +135,6 @@
                        (map first))]
         (when (> (* (last l) (last r)) 0.5)
           [l r])))))
-
-(def net (en-ut/eg-load "network.eg"))
-
-(defn mat-to-array [mat]
-  (let [m (Mat.)]
-   (.convertTo mat m CvType/CV_32F (/ 1.0 255))
-   (-> (.reshape m 1 1)
-      (MatOfFloat.)
-      (.toList))))
 
 (defn recognize-digit [digit]
   (->> [parse-as-2-contours
