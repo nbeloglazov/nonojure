@@ -7,7 +7,41 @@
              [core :as core]
              [charts :as charts]
              [stats :as stats]]
-            clojure.set))
+            clojure.set)
+  (:import [net.sf.javaml.core.kdtree KDTree]))
+
+(defprotocol GenericKDTree
+  (delete [this point])
+  (nearest-neighbor [this point n]))
+
+(defn build-tree [points type]
+  (let [points (shuffle points)]
+   (case type
+     :clojure (kd/build-tree points)
+     :java (let [tree (KDTree. 2)]
+             (doseq [point points]
+               (.insert tree (into-array Double/TYPE point) point))
+             tree)
+     (throw (IllegalArgumentException. (str "Not supported tree type: " type))))))
+
+(extend-protocol GenericKDTree
+  kdtree.Node
+  (delete [this point] (kd/delete this point))
+  (nearest-neighbor [this point n] (kd/nearest-neighbor this point n))
+  KDTree
+  (delete [this point]
+    (->> (into-array Double/TYPE point)
+         (.delete this))
+    this)
+  (nearest-neighbor [this point n]
+    (let [key (into-array Double/TYPE point)
+          neibs (seq (.nearest this key n))
+          dst-sqrd (fn [p2]
+                     (apply + (map (fn [v1 v2]
+                                     (* (- v1 v2)
+                                        (- v1 v2)))
+                                   point p2)))]
+      (map (fn [p] {:point p :dist-squared (dst-sqrd p)}) neibs))))
 
 (defn direction [[f-x f-y] [t-x t-y]]
   (let [angle (core/atan2 (- t-y f-y) (- t-x f-x))
@@ -20,7 +54,7 @@
               :else (throw (IllegalArgumentException. (str angle))))))
 
 (defn neib-4 [tree point]
-  (rest (kd/nearest-neighbor tree point 5)))
+  (rest (nearest-neighbor tree point 5)))
 
 (defn average-dist [tree points]
   (let [threshold (* 4 (count points) 0.1)]
@@ -45,7 +79,8 @@
 
 (defn build-points-neighbourhood [points]
   (with-scope :build-neighbourhood
-    (let [tree (with-scope :build-kd-tree (kd/build-tree points))
+    (let [type :java
+          tree (with-scope :build-kd-tree (build-tree points type))
           average-dist (with-scope :calculate-average-dist (average-dist tree points))
           neibs-map (fn [tree points]
                       (for [point points]
@@ -60,7 +95,9 @@
             (if (empty? bad)
               (into {} good)
               (recur (map first good)
-                     (reduce kd/delete tree (map first bad))))))))))
+;                     (build-tree (map first good) type)
+                     (reduce delete tree (map first bad))
+                     ))))))))
 
 (defn move [dir pos]
   (map + pos
