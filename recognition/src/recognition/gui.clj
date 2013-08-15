@@ -51,8 +51,9 @@
 (defn tree-cell-renderer []
   (proxy [DefaultTreeCellRenderer] []
     (getTreeCellRendererComponent [tree value _ _ _ _ _]
-      (let [{:keys [name status]} (.getUserObject value)]
+      (let [{:keys [name status time]} (.getUserObject value)]
         (.setClosedIcon this (icons status))
+        (.setToolTipText this time)
         (proxy-super getTreeCellRendererComponent tree (clojure.core/name name)
                      false false false 0 false)))))
 
@@ -62,26 +63,18 @@
       (.expandRow tree ind)
       (recur (inc ind)))))
 
-(defn tree-node [name status]
-  (DefaultMutableTreeNode. {:name (keyword name)
-                            :status status}))
-
 (defn create-tree-model [picture]
-  (DefaultTreeModel. (tree-node picture :progress)))
+  (DefaultTreeModel. (tree-node picture)))
 
 (def tree (sc/tree :model (create-tree-model "...")
                    :editable? false
                    :renderer (tree-cell-renderer)
                    :border (sb/line-border)))
 
+(.registerComponent (javax.swing.ToolTipManager/sharedInstance) tree)
+
 (defn reset-tree [file]
   (.setModel tree (create-tree-model file)))
-
-#_(let [model (.getModel tree)
-      root (.getRoot model)]
- (.insertNodeInto model (tree-node (str "step" (rand-int 10)) :done) root (.getChildCount root))
- (expand-all! tree)
- (.getChildCount root))
 
 (defn load-image [_]
   (when-let [file (open-image)]
@@ -105,21 +98,35 @@
             [x y] (map - (:mouse selected) [(.getWidth im) (.getHeight im)])]
         (.drawImage gr im (max x 0) (max y 0) nil)))))
 
+(defn tree-node [name]
+  (DefaultMutableTreeNode. {:name (keyword name)
+                            :status :progress
+                            :start (System/currentTimeMillis)
+                            :time "In progress"}))
+
+(defn finish-calculation [node]
+  (let [obj (.getUserObject node)
+        time (- (System/currentTimeMillis) (:start obj))]
+    (.setUserObject node (assoc obj
+                           :time (str time " ms")
+                           :status :done))
+    node))
+
 (defn trace-handler [tree]
   (let [model (sc/config tree :model)
         root (.getRoot model)
         path (atom (list root))]
     (fn [{:keys [scope type]}]
       (let [scope (.replaceAll (name scope) "-" " ")
-            node (tree-node scope (if (= type :begin) :progress :done))
-            top (first @path)]
+            top (first @path)
+            node (tree-node scope)]
        (invoke-now
         (if (= type :begin)
           (do
             (.insertNodeInto model node top (.getChildCount top))
             (swap! path conj node))
           (do
-            (.setUserObject top (.getUserObject node))
+            (finish-calculation top)
             (.nodeChanged model top)
             (swap! path rest)))
         (expand-all! tree))))))
@@ -229,8 +236,7 @@
           root (.getRoot model)]
       (reset! solution sol)
       (invoke-now
-       (.setUserObject root (assoc (.getUserObject root)
-                              :status :done))
+       (finish-calculation root)
        (.nodeChanged model root)
        (reset! recognized-image (draw-solution sol))
        (update-table sol)
