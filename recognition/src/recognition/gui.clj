@@ -17,7 +17,8 @@
              [utils :as utils]
              [digits :as digits]])
   (:import [javax.swing.tree DefaultTreeCellRenderer DefaultTreeModel DefaultMutableTreeNode]
-           [java.awt.image BufferedImage]))
+           [java.awt.image BufferedImage])
+  (:gen-class))
 
 
 (def icons (into {} (for [status [:done :progress]]
@@ -63,6 +64,12 @@
       (.expandRow tree ind)
       (recur (inc ind)))))
 
+(defn tree-node [name]
+  (DefaultMutableTreeNode. {:name (keyword name)
+                            :status :progress
+                            :start (System/currentTimeMillis)
+                            :time "In progress"}))
+
 (defn create-tree-model [picture]
   (DefaultTreeModel. (tree-node picture)))
 
@@ -97,12 +104,6 @@
       (let [im ((:digit-image-fn solution) (:rect selected))
             [x y] (map - (:mouse selected) [(.getWidth im) (.getHeight im)])]
         (.drawImage gr im (max x 0) (max y 0) nil)))))
-
-(defn tree-node [name]
-  (DefaultMutableTreeNode. {:name (keyword name)
-                            :status :progress
-                            :start (System/currentTimeMillis)
-                            :time "In progress"}))
 
 (defn finish-calculation [node]
   (let [obj (.getUserObject node)
@@ -306,9 +307,13 @@
 
 
 
-(def frame (doto (sc/frame :title "Nonogram recognizer"
+(defn frame []
+  (doto (sc/frame :title "Nonogram recognizer"
                            :content (get-layout)
                            :minimum-size [1200 :by 800])
              sc/pack!
              (.setLocationRelativeTo nil)
              sc/show!))
+
+(defn -main [& args]
+  (frame))

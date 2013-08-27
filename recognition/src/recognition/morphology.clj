@@ -5,8 +5,6 @@
              [utils :as u]
              [trace :refer [with-scope]]]))
 
-(recognition.Loader/loadLibrary "opencv_java246")
-
 (defn struct-element [type [width height]]
   (let [type (case type
                :rect Imgproc/MORPH_RECT
