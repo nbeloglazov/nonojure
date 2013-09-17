@@ -34,7 +34,7 @@
 (def running-task (atom nil))
 (def selected (atom nil))
 
-(declare frame)
+(def frame (atom nil))
 
 (defn revalidate [frame]
   (doto (.. frame getContentPane)
@@ -88,7 +88,7 @@
     (reset! image (javax.imageio.ImageIO/read file))
     (reset! image-file (.getAbsolutePath file))
     (reset-tree (.getName file))
-    (revalidate frame)))
+    (revalidate @frame)))
 
 (defn draw-image [comp gr image]
   (when-not (nil? image)
@@ -224,7 +224,7 @@
                         (utils/to-image))))))
 
 (defn update-table [solution]
-  (sc/config! (sc/select frame [:#solution]) :model (to-table-model solution)))
+  (sc/config! (sc/select @frame [:#solution]) :model (to-table-model solution)))
 
 
 (defn recognize []
@@ -241,10 +241,10 @@
        (.nodeChanged model root)
        (reset! recognized-image (draw-solution sol))
        (update-table sol)
-       (revalidate frame)))))
+       (revalidate @frame)))))
 
 (defn start-stop [_]
-  (let [button (sc/select frame [:#start-stop])]
+  (let [button (sc/select @frame [:#start-stop])]
     (if-let [task @running-task]
       (do
         (.stop task)
@@ -305,9 +305,7 @@
                                            :listen [:mouse-motion #'show-tooltip])
                           #_(sc/table :id :solution) "grow"]]))
 
-
-
-(defn frame []
+(defn new-frame []
   (doto (sc/frame :title "Nonogram recognizer"
                            :content (get-layout)
                            :minimum-size [1200 :by 800])
@@ -316,4 +314,4 @@
              sc/show!))
 
 (defn -main [& args]
-  (frame))
+  (reset! frame (new-frame)))

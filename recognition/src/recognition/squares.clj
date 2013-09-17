@@ -79,7 +79,7 @@
 
 (defn build-points-neighbourhood [points]
   (with-scope :build-neighbourhood
-    (let [type :java
+    (let [type :clojure
           tree (with-scope :build-kd-tree (build-tree points type))
           average-dist (with-scope :calculate-average-dist (average-dist tree points))
           neibs-map (fn [tree points]

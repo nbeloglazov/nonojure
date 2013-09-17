@@ -123,18 +123,19 @@
           [l r])))))
 
 (defn parse-as-2-digits-merged-in-1-contour [digit]
-  (let [rect (Imgproc/boundingRect (largest-contour digit))
-        ratio (/ (.width rect) (.height rect))]
-    (when (>= ratio 9/10)
-      (let [digit (submat digit (.x rect) (+ (.x rect) (.width rect)))
-            col (find-separator digit)
-            [l r] (->> [[0 (dec col)] [(inc col) (dec size)]]
-                       (map #(apply submat digit %))
-                       (map clear-noise!)
-                       (map parse-as-1-digit)
-                       (map first))]
-        (when (> (* (last l) (last r)) 0.5)
-          [l r])))))
+  (when-let [cont (largest-contour digit)]
+    (let [rect (Imgproc/boundingRect cont)
+          ratio (/ (.width rect) (.height rect))]
+      (when (>= ratio 9/10)
+        (let [digit (submat digit (.x rect) (+ (.x rect) (.width rect)))
+              col (find-separator digit)
+              [l r] (->> [[0 (dec col)] [(inc col) (dec size)]]
+                         (map #(apply submat digit %))
+                         (map clear-noise!)
+                         (map parse-as-1-digit)
+                         (map first))]
+          (when (> (* (last l) (last r)) 0.5)
+            [l r]))))))
 
 (defn recognize-digit [digit]
   (->> [parse-as-2-contours
