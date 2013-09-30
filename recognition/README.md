@@ -1,6 +1,6 @@
 # Nonojure Recognition
 
-Nonojure recognition is a library for parsing images of [nonogram](http://en.wikipedia.org/wiki/Nonogram) puzzles. Given image (photo) of a puzzle it tries it's best to parse it correctly.
+Nonojure recognition is a library for parsing images of [nonogram](http://en.wikipedia.org/wiki/Nonogram) puzzles. Given image (photo) of a puzzle it tries it's best to parse it correctly. This library can be used to create digital archive having magazines or newspapers with nonogram puzzles. 
 
 ### Installing
 
